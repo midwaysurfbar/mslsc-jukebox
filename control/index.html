@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MSLSC Jukebox — Control</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <strong>MSLSC Jukebox</strong>
+    <nav>
+      <button class="tab-btn active" data-tab="library">Library</button>
+      <button class="tab-btn" data-tab="playlists">Playlists</button>
+      <button class="tab-btn" data-tab="queue">Queue</button>
+      <button class="tab-btn" data-tab="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <section id="tab-library" class="tab-panel active">
+      <div class="panel-title">
+        <div>
+          <h1>Library</h1>
+          <p class="eyebrow" id="library-folder-label">No media folder set — go to Settings.</p>
+        </div>
+        <div class="button-row">
+          <input id="library-search" class="search-input" placeholder="Search…" />
+          <select id="library-group-by">
+            <option value="">Sort: Filename</option>
+            <option value="artist">Group: Artist</option>
+            <option value="genre">Group: Genre</option>
+            <option value="decade">Group: Decade</option>
+          </select>
+          <button class="secondary" id="enrich-btn">Enrich Library</button>
+          <button class="secondary" id="rescan-btn">Rescan Folder</button>
+        </div>
+      </div>
+      <div id="library-status" class="message"></div>
+      <div id="library-grid" class="library-grid"></div>
+    </section>
+
+    <section id="tab-playlists" class="tab-panel">
+      <div class="panel-title"><h1>Playlists</h1>
+        <div class="button-row"><input id="new-playlist-name" placeholder="New playlist name…" /><button class="primary" id="create-playlist-btn">Create</button></div>
+      </div>
+      <div id="playlists-list" class="playlists-list"></div>
+    </section>
+
+    <section id="tab-queue" class="tab-panel">
+      <div class="panel-title"><h1>Queue</h1>
+        <div class="button-row"><button class="danger" id="clear-queue-btn">Clear Queue</button></div>
+      </div>
+      <ol id="queue-list" class="queue-list"></ol>
+    </section>
+
+    <section id="tab-settings" class="tab-panel">
+      <div class="panel-title"><h1>Settings</h1></div>
+      <div class="settings-form">
+        <label><span>Media folder</span>
+          <div class="button-row"><input id="settings-folder" readonly /><button class="secondary" id="choose-folder-btn">Choose…</button></div>
+        </label>
+        <label><span>Crossfade duration: <b id="crossfade-value">3</b>s</span>
+          <input id="crossfade-slider" type="range" min="1" max="10" step="0.5" value="3" />
+        </label>
+        <label><span>Volume: <b id="volume-value">100</b>%</span>
+          <input id="volume-slider" type="range" min="0" max="100" step="5" value="100" />
+        </label>
+      </div>
+    </section>
+  </main>
+
+  <footer class="now-playing" id="now-playing">
+    <div class="np-info">
+      <strong id="np-title">Nothing playing</strong>
+      <div class="np-progress"><div id="np-progress-bar" class="np-progress-bar"></div></div>
+      <small><span id="np-time">0:00</span> / <span id="np-duration">0:00</span></small>
+    </div>
+    <div class="np-controls">
+      <button id="np-previous" title="Previous">⏮</button>
+      <button id="np-toggle" title="Play/Pause">⏯</button>
+      <button id="np-skip" title="Skip">⏭</button>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

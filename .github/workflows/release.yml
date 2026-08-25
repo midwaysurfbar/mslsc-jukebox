@@ -1,0 +1,37 @@
+name: Build and publish release
+
+# Manual trigger only. Builds both installers (Windows on windows-latest,
+# Linux on ubuntu-latest) and publishes them, together with the
+# electron-updater feed files (latest.yml / latest-linux.yml), to one
+# GitHub Release matching the version in package.json - that Release is
+# what every installed copy of the Jukebox checks against for
+# auto-updates, so bump the version before running this whenever real
+# code changes ship.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            script: dist:win
+          - os: ubuntu-latest
+            script: dist:linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+
+      - run: npm run ${{ matrix.script }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

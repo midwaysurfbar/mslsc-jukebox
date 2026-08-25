@@ -1,0 +1,29 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: #000; overflow: hidden; cursor: none; }
+.stage { position: relative; width: 100vw; height: 100vh; background: #000; }
+.deck {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  object-fit: contain;
+  background: #000;
+  opacity: 0;
+  transition: opacity linear;
+}
+.deck.active { opacity: 1; }
+.idle {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #4a6572;
+  font-family: system-ui, -apple-system, sans-serif;
+  text-align: center;
+}
+.idle p { font-size: 2.5rem; font-weight: 800; letter-spacing: 0.05em; }
+.idle small { font-size: 1.1rem; opacity: 0.7; }
+.idle.hidden { display: none; }

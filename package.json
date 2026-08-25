@@ -1,0 +1,59 @@
+{
+  "name": "mslsc-jukebox",
+  "productName": "MSLSC Jukebox",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local video jukebox for the TV connected to the venue PC - library, playlists, queue and crossfade transitions between clips.",
+  "author": "Midway Surf Lifesaving Club",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win --publish always",
+    "dist:linux": "electron-builder --linux --publish always"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "nz.org.mslsc.jukebox",
+    "publish": {
+      "provider": "github",
+      "owner": "midwaysurfbar",
+      "repo": "mslsc-jukebox"
+    },
+    "productName": "MSLSC Jukebox",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload-control.js",
+      "preload-display.js",
+      "control/**/*",
+      "display/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MSLSC Jukebox"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "AudioVideo"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  }
+}

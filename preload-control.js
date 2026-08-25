@@ -1,0 +1,40 @@
+const { contextBridge, ipcRenderer } = require('electron')
+
+contextBridge.exposeInMainWorld('jukebox', {
+  // Settings / media folder
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+  chooseMediaFolder: () => ipcRenderer.invoke('media-folder:choose'),
+  listVideos: () => ipcRenderer.invoke('media-folder:list'),
+
+  // Playlists
+  getPlaylists: () => ipcRenderer.invoke('playlists:get-all'),
+  savePlaylist: (playlist) => ipcRenderer.invoke('playlists:save', playlist),
+  deletePlaylist: (id) => ipcRenderer.invoke('playlists:delete', id),
+
+  // Queue
+  getQueue: () => ipcRenderer.invoke('queue:get'),
+  saveQueue: (queue) => ipcRenderer.invoke('queue:save', queue),
+
+  // Thumbnails (generated in this renderer via <video>+<canvas>, saved via main)
+  saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
+  getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),
+
+  // Metadata enrichment
+  getMetadataCache: () => ipcRenderer.invoke('metadata:get-cache'),
+  lookupMetadata: (key, filename) => ipcRenderer.invoke('metadata:lookup', key, filename),
+  setManualMetadata: (key, entry) => ipcRenderer.invoke('metadata:set-manual', key, entry),
+
+  // Player commands (relayed to the Display window)
+  playerLoadQueue: (payload) => ipcRenderer.send('player:load-queue', payload),
+  playerPlay: () => ipcRenderer.send('player:play'),
+  playerPause: () => ipcRenderer.send('player:pause'),
+  playerTogglePlayPause: () => ipcRenderer.send('player:toggle-play-pause'),
+  playerSkip: () => ipcRenderer.send('player:skip'),
+  playerPrevious: () => ipcRenderer.send('player:previous'),
+  playerSetCrossfadeDuration: (seconds) => ipcRenderer.send('player:set-crossfade-duration', seconds),
+  playerSetVolume: (volume) => ipcRenderer.send('player:set-volume', volume),
+
+  // Player state (relayed back from the Display window)
+  onPlayerState: (callback) => ipcRenderer.on('player:state', (_event, state) => callback(state)),
+})
