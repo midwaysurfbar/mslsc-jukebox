@@ -11,9 +11,19 @@ let groupBy = ''
 // are full of spaces and other characters that are invalid in a bare
 // file:// URL - each path segment needs percent-encoding, not the path
 // as a whole (encodeURIComponent would also mangle the / or \ separators).
+// A Windows path's drive letter (e.g. "C:") must stay literal in a
+// file:// URL - encodeURIComponent turns ":" into "%3A", which produces
+// a URL that can't resolve to any real file. Everything AFTER the
+// drive letter still needs normal per-segment encoding (spaces, etc),
+// same as a POSIX path.
 function toFileUrl(filePath) {
-  const sep = filePath.includes('\\') ? '\\' : '/'
-  return 'file://' + filePath.split(sep).map(encodeURIComponent).join('/')
+  const winMatch = filePath.match(/^([A-Za-z]:)[\\/](.*)$/)
+  if (winMatch) {
+    const [, drive, rest] = winMatch
+    const encoded = rest.split(/[\\/]/).map(encodeURIComponent).join('/')
+    return `file:///${drive}/${encoded}`
+  }
+  return 'file://' + filePath.split('/').map(encodeURIComponent).join('/')
 }
 
 function trackByKey(key) { return library.find((t) => t.key === key) }
