@@ -73,15 +73,28 @@ document.getElementById('volume-slider').addEventListener('input', async (e) => 
 
 // --- Library: scan, thumbnails/duration, render ---
 
+// The path actually handed to <video>/Display for playback - the
+// converted copy once one exists, otherwise the original file as
+// downloaded. Everything that plays or previews a track should go
+// through this rather than reading track.path directly.
+function playablePath(track) {
+  return track.convertedPath || track.path
+}
+
 async function generateThumbAndDuration(track) {
+  const convertedPath = await jukebox.getConvertedPath(track.key)
+  if (convertedPath) track.convertedPath = convertedPath
+
   const existingThumb = await jukebox.getThumbnailPath(track.key)
   return new Promise((resolve) => {
     const video = document.createElement('video')
     video.preload = 'metadata'
     video.muted = true
-    video.src = toFileUrl(track.path)
+    video.src = toFileUrl(playablePath(track))
     video.addEventListener('loadedmetadata', () => {
       track.duration = video.duration
+      track.error = false
+      track.needsConversion = false
       if (existingThumb) { track.thumbPath = existingThumb; video.remove(); resolve(); return }
       video.currentTime = Math.min(3, video.duration / 2 || 0)
     })
@@ -99,7 +112,16 @@ async function generateThumbAndDuration(track) {
       video.remove()
       resolve()
     })
-    video.addEventListener('error', () => { track.duration = 0; track.error = true; video.remove(); resolve() })
+    video.addEventListener('error', () => {
+      track.duration = 0
+      track.error = true
+      // Only offer conversion for the original file failing - if the
+      // ALREADY-CONVERTED copy somehow fails too, converting it again
+      // won't help, so don't offer to retry forever.
+      track.needsConversion = !track.convertedPath
+      video.remove()
+      resolve()
+    })
   })
 }
 
@@ -143,16 +165,18 @@ function playlistPickerHtml(track) {
 function renderTrackTile(track) {
   const meta = metadataCache[track.key]
   const thumbStyle = track.thumbPath ? `background-image:url('${toFileUrl(track.thumbPath)}')` : ''
+  const thumbLabel = track.converting ? '⏳ Converting…' : track.thumbPath ? '' : (track.needsConversion ? '⚠ Needs conversion' : (track.error ? '⚠ Unsupported' : '🎬'))
   return `
     <div class="track-tile">
-      <div class="track-thumb" style="${thumbStyle}">${track.thumbPath ? '' : (track.error ? '⚠ Unsupported' : '🎬')}</div>
+      <div class="track-thumb" style="${thumbStyle}">${thumbLabel}</div>
       <div class="track-info">
         <strong title="${track.filename}">${track.filename}</strong>
-        <div class="track-meta">${fmtTime(track.duration)} · ${fmtBytes(track.size)}${meta && meta.artist !== 'Unknown' ? ` · ${meta.artist}` : ''}</div>
+        <div class="track-meta">${fmtTime(track.duration)} · ${fmtBytes(track.size)}${meta && meta.artist !== 'Unknown' ? ` · ${meta.artist}` : ''}${track.convertedPath ? ' · converted' : ''}</div>
       </div>
       <div class="track-actions">
-        <button class="secondary" data-play-now="${track.key}">▶ Play</button>
-        <button class="secondary" data-add-queue="${track.key}">+ Queue</button>
+        ${track.needsConversion
+          ? `<button class="primary" data-convert="${track.key}" ${track.converting ? 'disabled' : ''}>${track.converting ? 'Converting…' : 'Convert'}</button>`
+          : `<button class="secondary" data-play-now="${track.key}">▶ Play</button><button class="secondary" data-add-queue="${track.key}">+ Queue</button>`}
       </div>
       <div class="track-actions">${playlistPickerHtml(track)}</div>
     </div>`
@@ -183,7 +207,39 @@ function renderLibrary() {
     if (e.target.value) addTrackToPlaylist(e.target.value, el.dataset.addToPlaylist)
     e.target.value = ''
   }))
+  grid.querySelectorAll('[data-convert]').forEach((el) => el.addEventListener('click', () => convertTrack(el.dataset.convert)))
 }
+
+// Re-encodes one track to plain H.264/AAC MP4 via the bundled ffmpeg,
+// then re-runs the same duration/thumbnail pass a freshly-scanned file
+// gets - generateThumbAndDuration already prefers a converted copy the
+// moment one exists, so this is the only place that needs to know
+// conversion happened at all.
+async function convertTrack(key) {
+  const track = trackByKey(key)
+  if (!track || track.converting) return
+  track.converting = true
+  renderLibrary()
+  try {
+    track.convertedPath = await jukebox.convertFile(key, track.path)
+    track.needsConversion = false
+  } catch (err) {
+    document.getElementById('library-status').textContent = `Could not convert "${track.filename}": ${err.message}`
+  }
+  track.converting = false
+  await generateThumbAndDuration(track)
+  renderLibrary()
+}
+
+document.getElementById('convert-all-btn').addEventListener('click', async () => {
+  const status = document.getElementById('library-status')
+  const toConvert = library.filter((t) => t.needsConversion && !t.converting)
+  for (let i = 0; i < toConvert.length; i++) {
+    status.textContent = `Converting ${i + 1}/${toConvert.length}: "${toConvert[i].filename}"…`
+    await convertTrack(toConvert[i].key)
+  }
+  status.textContent = toConvert.length ? '' : 'Nothing needs converting right now.'
+})
 
 // --- Queue ---
 
@@ -192,10 +248,17 @@ async function saveAndSyncQueue() {
   renderQueue()
 }
 
+// Display only ever needs a path to play - handing it the converted
+// copy's path (when one exists) under the same track shape means it
+// never has to know conversion is a thing at all.
+function toDisplayTrack(track) {
+  return { ...track, path: playablePath(track) }
+}
+
 async function playNow(key) {
   queue = { tracks: [key], currentIndex: 0 }
   await saveAndSyncQueue()
-  jukebox.playerLoadQueue({ tracks: [trackByKey(key)], startIndex: 0 })
+  jukebox.playerLoadQueue({ tracks: [toDisplayTrack(trackByKey(key))], startIndex: 0 })
 }
 
 async function addToQueue(key) {
@@ -248,7 +311,7 @@ async function removeQueueItem(index) {
 async function playQueueFrom(index) {
   queue.currentIndex = index
   await saveAndSyncQueue()
-  jukebox.playerLoadQueue({ tracks: queue.tracks.map(trackByKey).filter(Boolean), startIndex: index })
+  jukebox.playerLoadQueue({ tracks: queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack), startIndex: index })
 }
 
 // --- Playlists ---
@@ -285,7 +348,7 @@ async function playPlaylistNow(playlistId) {
   if (!playlist || playlist.trackKeys.length === 0) return
   queue = { tracks: [...playlist.trackKeys], currentIndex: 0 }
   await saveAndSyncQueue()
-  jukebox.playerLoadQueue({ tracks: queue.tracks.map(trackByKey).filter(Boolean), startIndex: 0 })
+  jukebox.playerLoadQueue({ tracks: queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack), startIndex: 0 })
 }
 async function appendPlaylistToQueue(playlistId) {
   const playlist = playlists.find((p) => p.id === playlistId)

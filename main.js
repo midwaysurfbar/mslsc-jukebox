@@ -3,6 +3,17 @@ const { autoUpdater } = require('electron-updater')
 const path = require('node:path')
 const fs = require('node:fs')
 const crypto = require('node:crypto')
+const { spawn } = require('node:child_process')
+
+// ffmpeg-static's own path points inside app.asar once packaged, which
+// isn't directly executable - electron-builder is configured (see
+// package.json's asarUnpack) to unpack this one file out to
+// app.asar.unpacked at the same relative path, so this just needs to
+// swap that one path segment rather than knowing the real path itself.
+const ffmpegStaticPath = require('ffmpeg-static')
+const FFMPEG_PATH = app.isPackaged
+  ? ffmpegStaticPath.replace('app.asar', 'app.asar.unpacked')
+  : ffmpegStaticPath
 
 // Two windows: Control (staff-facing, PC's own monitor - library, playlists,
 // queue, settings) and Display (frameless fullscreen, sent to the TV's
@@ -19,6 +30,7 @@ const PLAYLISTS_PATH = path.join(USER_DATA, 'playlists.json')
 const QUEUE_PATH = path.join(USER_DATA, 'queue.json')
 const METADATA_PATH = path.join(USER_DATA, 'metadata.json')
 const THUMBNAILS_DIR = path.join(USER_DATA, 'thumbnails')
+const CONVERTED_DIR = path.join(USER_DATA, 'converted')
 
 const DEFAULT_SETTINGS = { mediaFolder: '', crossfadeSeconds: 3, volume: 1 }
 
@@ -186,6 +198,52 @@ ipcMain.handle('thumbnails:save', (_event, key, dataUrl) => {
 ipcMain.handle('thumbnails:get-path', (_event, key) => {
   const filePath = path.join(THUMBNAILS_DIR, `${key}.jpg`)
   return fs.existsSync(filePath) ? filePath : null
+})
+
+// --- IPC: format conversion for files Chromium can't decode natively
+// (HEVC, AV1, AVI, WMV, etc) - re-encodes to plain H.264/AAC MP4 via
+// the bundled ffmpeg binary. The original file is never touched; the
+// converted copy is cached in userData keyed the same way as
+// thumbnails, so it only ever needs converting once per file.
+
+ipcMain.handle('convert:get-path', (_event, key) => {
+  const filePath = path.join(CONVERTED_DIR, `${key}.mp4`)
+  return fs.existsSync(filePath) ? filePath : null
+})
+
+ipcMain.handle('convert:run', (_event, key, sourcePath) => {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(CONVERTED_DIR, { recursive: true })
+    const outputPath = path.join(CONVERTED_DIR, `${key}.mp4`)
+    const tempPath = path.join(CONVERTED_DIR, `${key}.tmp.mp4`)
+
+    const ffmpeg = spawn(FFMPEG_PATH, [
+      '-y',
+      '-i', sourcePath,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+      '-c:a', 'aac', '-b:a', '192k',
+      '-movflags', '+faststart',
+      tempPath,
+    ])
+
+    let stderrTail = ''
+    ffmpeg.stderr.on('data', (chunk) => {
+      stderrTail = (stderrTail + chunk.toString()).slice(-2000)
+    })
+    ffmpeg.on('error', (err) => reject(new Error(`Could not start the converter: ${err.message}`)))
+    ffmpeg.on('close', (code) => {
+      if (code === 0) {
+        // Renamed into place only on success - a failed/interrupted
+        // conversion never leaves a half-written file at the real path
+        // for a later run to mistake for a finished one.
+        fs.renameSync(tempPath, outputPath)
+        resolve(outputPath)
+      } else {
+        fs.rmSync(tempPath, { force: true })
+        reject(new Error(`Conversion failed (exit code ${code}): ${stderrTail.split('\n').pop()}`))
+      }
+    })
+  })
 })
 
 // --- IPC: metadata enrichment (iTunes Search API - best-effort, cached

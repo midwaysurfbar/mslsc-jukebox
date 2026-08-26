@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('jukebox', {
   saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
   getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),
 
+  // Format conversion (bundled ffmpeg, runs in main - see convert:run)
+  getConvertedPath: (key) => ipcRenderer.invoke('convert:get-path', key),
+  convertFile: (key, sourcePath) => ipcRenderer.invoke('convert:run', key, sourcePath),
+
   // Metadata enrichment
   getMetadataCache: () => ipcRenderer.invoke('metadata:get-cache'),
   lookupMetadata: (key, filename) => ipcRenderer.invoke('metadata:lookup', key, filename),
