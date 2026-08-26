@@ -58,10 +58,27 @@ function showIdleOverlay(show) {
   idleOverlay.classList.toggle('hidden', !show)
 }
 
+// HTMLMediaElement's standard error codes - MEDIA_ERR_SRC_NOT_SUPPORTED
+// (4) is what fires for a codec/container Chromium can't decode, which
+// is the by-far-most-common failure for downloaded video files. `.message`
+// is a Chromium-specific (non-standard but present) extension that often
+// has genuinely useful detail (e.g. naming the codec), included whenever
+// it's there.
+function describeMediaError(err) {
+  const reasons = {
+    1: 'The download was aborted before it finished loading.',
+    2: 'A network error interrupted loading this file.',
+    3: 'The file appears to be corrupt, or uses a codec that failed to decode.',
+    4: "This file's format or codec isn't supported (needs MP4/H.264 or WebM/VP9 - not HEVC, AV1, AVI or WMV).",
+  }
+  const base = reasons[err?.code] || 'Unknown playback error.'
+  return err?.message ? `${base} (${err.message})` : base
+}
+
 async function loadDeck(deck, track) {
   return new Promise((resolve, reject) => {
     const onReady = () => { cleanup(); resolve() }
-    const onError = () => { cleanup(); reject(new Error('unsupported-format')) }
+    const onError = () => { cleanup(); reject(describeMediaError(deck.error)) }
     function cleanup() {
       deck.removeEventListener('canplay', onReady)
       deck.removeEventListener('error', onError)
@@ -91,8 +108,8 @@ async function playIndex(index) {
   const track = queue[index]
   try {
     await loadDeck(activeDeck, track)
-  } catch {
-    reportState({ status: 'error', errorTrack: track })
+  } catch (reason) {
+    reportState({ status: 'error', errorTrack: track, errorReason: reason })
     // Don't stall the room on one bad file - move on after a moment.
     setTimeout(() => playIndex(index + 1), 2500)
     return

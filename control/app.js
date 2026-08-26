@@ -343,7 +343,7 @@ jukebox.onPlayerState((state) => {
   const pct = state.duration ? (state.timeElapsed / state.duration) * 100 : 0
   document.getElementById('np-progress-bar').style.width = `${pct}%`
   if (state.status === 'error' && state.errorTrack) {
-    document.getElementById('library-status').textContent = `"${state.errorTrack.filename}" could not be played (unsupported format) — skipped.`
+    document.getElementById('library-status').textContent = `"${state.errorTrack.filename}" could not be played — ${state.errorReason || 'unsupported format'} — skipped.`
   }
   // Keep the queue view's now-playing highlight and currentIndex in sync.
   if (typeof state.currentIndex === 'number' && state.currentIndex !== queue.currentIndex) {
