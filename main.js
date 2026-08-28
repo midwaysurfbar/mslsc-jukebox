@@ -5,6 +5,10 @@ const fs = require('node:fs')
 const crypto = require('node:crypto')
 const { spawn } = require('node:child_process')
 
+// Deck videos play unmuted (audio goes to the Windows default output -
+// the venue's Bluetooth sound system), so allow autoplay without a gesture.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+
 // ffmpeg-static's own path points inside app.asar once packaged, which
 // isn't directly executable - electron-builder is configured (see
 // package.json's asarUnpack) to unpack this one file out to

@@ -195,6 +195,7 @@ function onEnded() {
 }
 
 for (const deck of [deckA, deckB]) {
+  deck.muted = false
   deck.addEventListener('timeupdate', () => { if (deck === activeDeck) onTimeUpdate() })
   deck.addEventListener('ended', () => { if (deck === activeDeck) onEnded() })
 }
