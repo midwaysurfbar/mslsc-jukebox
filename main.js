@@ -190,6 +190,26 @@ ipcMain.handle('queue:save', (_event, queue) => {
   return true
 })
 
+// Wipes every piece of the app's own state - playlists, queue, cached
+// thumbnails/converted copies, metadata guesses, and the media folder
+// selection itself - so the jukebox comes up exactly as it would on a
+// fresh install. Never touches a single real video file on disk; the
+// media folder is only ever read from, not written to.
+ipcMain.handle('library:reset-all', () => {
+  writeJson(PLAYLISTS_PATH, [])
+  writeJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
+  writeJson(METADATA_PATH, {})
+  fs.rmSync(THUMBNAILS_DIR, { recursive: true, force: true })
+  fs.rmSync(CONVERTED_DIR, { recursive: true, force: true })
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), mediaFolder: '' }
+  writeJson(SETTINGS_PATH, settings)
+  if (displayWindow) {
+    displayWindow.webContents.send('settings:updated', settings)
+    displayWindow.webContents.send('player:load-queue', { tracks: [], startIndex: 0 })
+  }
+  return settings
+})
+
 // --- IPC: thumbnails (generated client-side in Control via <video>+<canvas>, saved here) ---
 
 ipcMain.handle('thumbnails:save', (_event, key, dataUrl) => {

@@ -281,6 +281,27 @@ document.getElementById('clear-queue-btn').addEventListener('click', async () =>
   await saveAndSyncQueue()
 })
 
+document.getElementById('reset-library-btn').addEventListener('click', async () => {
+  const sure = confirm(
+    'Clear every playlist, the queue, and cached thumbnails/conversions, and un-set the media folder?\n\n' +
+    'Your actual video files are NOT deleted — you\'ll just need to choose the media folder again.\n\n' +
+    'This cannot be undone.'
+  )
+  if (!sure) return
+
+  settings = await jukebox.resetLibrary()
+  library = []
+  metadataCache = {}
+  playlists = []
+  queue = { tracks: [], currentIndex: 0 }
+  document.getElementById('settings-folder').value = ''
+  document.getElementById('library-folder-label').textContent = 'No media folder set — go to Settings.'
+  document.getElementById('library-status').textContent = ''
+  renderLibrary()
+  renderPlaylists()
+  renderQueue()
+})
+
 function renderQueue() {
   const list = document.getElementById('queue-list')
   list.innerHTML = queue.tracks.map((key, i) => {

@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('jukebox', {
   getQueue: () => ipcRenderer.invoke('queue:get'),
   saveQueue: (queue) => ipcRenderer.invoke('queue:save', queue),
 
+  // Wipes playlists/queue/caches/media-folder selection - never touches
+  // the actual video files. Returns the reset settings.
+  resetLibrary: () => ipcRenderer.invoke('library:reset-all'),
+
   // Thumbnails (generated in this renderer via <video>+<canvas>, saved via main)
   saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
   getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),
