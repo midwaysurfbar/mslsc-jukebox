@@ -137,12 +137,21 @@ async function generateThumbAndDuration(track) {
 
 async function rescanLibrary() {
   document.getElementById('library-status').textContent = 'Scanning…'
-  const files = await jukebox.listVideos()
+  const { files, prunedCount } = await jukebox.listVideos()
   metadataCache = await jukebox.getMetadataCache()
   library = files
   // Thumbnails/duration are generated a few at a time, not all at once,
   // so a big library doesn't freeze the UI - re-render as each batch lands.
-  document.getElementById('library-status').textContent = files.length ? '' : 'No video files found in the media folder.'
+  // A rescan also clears out any cached thumbnail/converted-video file
+  // that no longer matches a real video (see pruneOrphanedCacheFiles in
+  // main.js) - worth a mention when it actually does something, since
+  // that's exactly the "shows as unconverted even though it's already
+  // been converted" symptom fixing itself.
+  document.getElementById('library-status').textContent = !files.length
+    ? 'No video files found in the media folder.'
+    : prunedCount
+      ? `Cleaned up ${prunedCount} stale cache file${prunedCount === 1 ? '' : 's'} from earlier scans.`
+      : ''
   renderLibrary()
   const BATCH = 4
   for (let i = 0; i < library.length; i += BATCH) {

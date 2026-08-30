@@ -51,8 +51,17 @@ function writeJson(filePath, value) {
   fs.writeFileSync(filePath, JSON.stringify(value))
 }
 
-function fileKey(filePath, mtimeMs) {
-  return crypto.createHash('md5').update(`${filePath}:${mtimeMs}`).digest('hex')
+// Deliberately NOT keyed on mtime - copying files onto the PC (from a
+// USB stick, extracting an archive, a sync tool) very commonly resets
+// modified-time even though the content is byte-identical. That used to
+// mint a brand new key for the exact same video, so its already-converted
+// copy silently became unreachable (orphaned on disk) and the track
+// looked unconverted again despite a perfectly good converted copy
+// already existing. Size changes far less often than mtime for a file
+// that's genuinely the same content, so path+size is a much more stable
+// identity for this purpose.
+function fileKey(filePath, size) {
+  return crypto.createHash('md5').update(`${filePath}:${size}`).digest('hex')
 }
 
 // --- Media folder scanning ---
@@ -70,10 +79,39 @@ function walkVideoFiles(dir, results = []) {
       walkVideoFiles(full, results)
     } else if (VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       const stat = fs.statSync(full)
-      results.push({ path: full, filename: entry.name, size: stat.size, mtimeMs: stat.mtimeMs, key: fileKey(full, stat.mtimeMs) })
+      results.push({ path: full, filename: entry.name, size: stat.size, mtimeMs: stat.mtimeMs, key: fileKey(full, stat.size) })
     }
   }
   return results
+}
+
+// Removes any cached thumbnail/converted-video file that no longer
+// corresponds to a video the last scan actually found - the leftovers
+// from the mtime-keying bug described above, plus any ordinary case of
+// a source file being renamed/deleted. Only runs when the scan actually
+// found files: an empty result (e.g. the media folder is temporarily
+// unreachable - drive unplugged, network share down) must never be
+// read as "everything's gone, delete every cache file" - the source
+// videos are never touched either way, so the only cost of a wrongful
+// prune would be one extra re-conversion later, but there's no reason
+// to risk it needlessly.
+function pruneOrphanedCacheFiles(validKeys) {
+  let removed = 0
+  for (const dir of [THUMBNAILS_DIR, CONVERTED_DIR]) {
+    let entries
+    try {
+      entries = fs.readdirSync(dir)
+    } catch {
+      continue
+    }
+    for (const name of entries) {
+      const key = name.replace(/\.[^.]+$/, '').replace(/\.tmp$/, '')
+      if (!validKeys.has(key)) {
+        try { fs.rmSync(path.join(dir, name), { force: true }); removed += 1 } catch { /* best effort */ }
+      }
+    }
+  }
+  return removed
 }
 
 // --- Windows ---
@@ -165,8 +203,10 @@ ipcMain.handle('media-folder:choose', async () => {
 
 ipcMain.handle('media-folder:list', () => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
-  if (!settings.mediaFolder) return []
-  return walkVideoFiles(settings.mediaFolder)
+  if (!settings.mediaFolder) return { files: [], prunedCount: 0 }
+  const files = walkVideoFiles(settings.mediaFolder)
+  const prunedCount = files.length > 0 ? pruneOrphanedCacheFiles(new Set(files.map((r) => r.key))) : 0
+  return { files, prunedCount }
 })
 
 ipcMain.handle('playlists:get-all', () => readJson(PLAYLISTS_PATH, []))
