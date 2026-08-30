@@ -74,6 +74,17 @@ function walkVideoFiles(dir, results = []) {
     return results
   }
   for (const entry of entries) {
+    // Dot-prefixed entries are hidden Unix/macOS convention, never a
+    // real video a person meant to add - most commonly .AppleDouble
+    // (a whole folder of 0-byte same-named sidecar files macOS leaves
+    // behind when files are copied to/from a Mac onto a filesystem that
+    // can't store its metadata) and ._filename sidecars sitting next to
+    // the real file. Without this, each one looks like a second, broken
+    // copy of every real video - same filename, fails to play (it's not
+    // actually video data), shows as "needs conversion" right next to
+    // the real, working entry. fs.readdirSync doesn't filter these out
+    // itself the way Windows Explorer / Get-ChildItem do by default.
+    if (entry.name.startsWith('.')) continue
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
       walkVideoFiles(full, results)
