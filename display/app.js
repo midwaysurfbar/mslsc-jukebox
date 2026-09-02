@@ -208,6 +208,11 @@ jukebox.onLoadQueue(({ tracks, startIndex }) => {
   queue = tracks || []
   playIndex(startIndex || 0)
 })
+// A reorder (Shuffle) - swap in the new track order but leave playback
+// exactly where it is. currentIndex still points at the same track
+// object (Control only ever reorders what's ahead of it), so this never
+// needs to touch the deck.
+jukebox.onUpdateQueue((tracks) => { queue = tracks || [] })
 jukebox.onPlay(() => { if (currentTrack()) { activeDeck.play(); isPlaying = true; reportState() } })
 jukebox.onPause(() => { activeDeck.pause(); if (isTransitioning) idleDeck.pause(); isPlaying = false; reportState() })
 jukebox.onTogglePlayPause(() => {

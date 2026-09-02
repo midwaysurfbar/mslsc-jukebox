@@ -285,6 +285,20 @@ async function addToQueue(key) {
   await saveAndSyncQueue()
 }
 
+// Whole library, shuffled - excludes anything still needing conversion,
+// same rule the individual track tiles already follow (no +Queue button
+// shows for those either, since Display can't actually play them yet).
+document.getElementById('add-all-queue-btn').addEventListener('click', async () => {
+  const keys = library.filter((t) => !t.needsConversion).map((t) => t.key)
+  if (!keys.length) return
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[keys[i], keys[j]] = [keys[j], keys[i]]
+  }
+  queue.tracks.push(...keys)
+  await saveAndSyncQueue()
+})
+
 document.getElementById('clear-queue-btn').addEventListener('click', async () => {
   queue = { tracks: [], currentIndex: 0 }
   await saveAndSyncQueue()
@@ -437,6 +451,27 @@ let lastPlayerState = null
 document.getElementById('np-previous').addEventListener('click', () => jukebox.playerPrevious())
 document.getElementById('np-toggle').addEventListener('click', () => jukebox.playerTogglePlayPause())
 document.getElementById('np-skip').addEventListener('click', () => jukebox.playerSkip())
+document.getElementById('np-shuffle').addEventListener('click', shuffleUpcoming)
+
+// Randomises everything still to come, leaving whatever's currently
+// playing (and anything already played before it) exactly where it is -
+// pressing Shuffle should never interrupt what's on screen right now.
+// Pushed to Display via playerUpdateQueue rather than playerLoadQueue,
+// which would restart the current track from 0.
+async function shuffleUpcoming() {
+  const nowPlaying = lastPlayerState && lastPlayerState.status !== 'idle'
+  const from = nowPlaying ? queue.currentIndex + 1 : 0
+  if (queue.tracks.length - from < 2) return // nothing left to shuffle
+
+  const upcoming = queue.tracks.slice(from)
+  for (let i = upcoming.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[upcoming[i], upcoming[j]] = [upcoming[j], upcoming[i]]
+  }
+  queue.tracks = [...queue.tracks.slice(0, from), ...upcoming]
+  await saveAndSyncQueue()
+  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+}
 
 jukebox.onPlayerState((state) => {
   lastPlayerState = state

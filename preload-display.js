@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('jukebox', {
   onSettingsUpdated: (callback) => ipcRenderer.on('settings:updated', (_event, settings) => callback(settings)),
 
   onLoadQueue: (callback) => ipcRenderer.on('player:load-queue', (_event, payload) => callback(payload)),
+  onUpdateQueue: (callback) => ipcRenderer.on('player:update-queue', (_event, tracks) => callback(tracks)),
   onPlay: (callback) => ipcRenderer.on('player:play', () => callback()),
   onPause: (callback) => ipcRenderer.on('player:pause', () => callback()),
   onTogglePlayPause: (callback) => ipcRenderer.on('player:toggle-play-pause', () => callback()),

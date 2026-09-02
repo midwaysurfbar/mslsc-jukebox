@@ -35,6 +35,10 @@ contextBridge.exposeInMainWorld('jukebox', {
 
   // Player commands (relayed to the Display window)
   playerLoadQueue: (payload) => ipcRenderer.send('player:load-queue', payload),
+  // Replaces Display's in-memory queue array without touching playback -
+  // no reload, no restart-from-0 - used after a reorder (Shuffle) where
+  // whatever's currently playing should keep playing right where it is.
+  playerUpdateQueue: (tracks) => ipcRenderer.send('player:update-queue', tracks),
   playerPlay: () => ipcRenderer.send('player:play'),
   playerPause: () => ipcRenderer.send('player:pause'),
   playerTogglePlayPause: () => ipcRenderer.send('player:toggle-play-pause'),

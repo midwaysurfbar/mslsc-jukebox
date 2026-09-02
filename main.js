@@ -374,7 +374,7 @@ ipcMain.handle('metadata:set-manual', (_event, key, entry) => {
 
 // --- IPC: player command/state relay between the two windows ---
 
-const PLAYER_COMMANDS = ['load-queue', 'play', 'pause', 'toggle-play-pause', 'skip', 'previous', 'set-crossfade-duration', 'set-volume']
+const PLAYER_COMMANDS = ['load-queue', 'update-queue', 'play', 'pause', 'toggle-play-pause', 'skip', 'previous', 'set-crossfade-duration', 'set-volume']
 for (const command of PLAYER_COMMANDS) {
   ipcMain.on(`player:${command}`, (_event, payload) => {
     if (displayWindow) displayWindow.webContents.send(`player:${command}`, payload)
