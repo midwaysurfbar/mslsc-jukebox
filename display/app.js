@@ -7,6 +7,8 @@
 const deckA = document.getElementById('deckA')
 const deckB = document.getElementById('deckB')
 const idleOverlay = document.getElementById('idle')
+const adOverlay = document.getElementById('adOverlay')
+const adImageEl = document.getElementById('adImage')
 
 let queue = []
 let currentIndex = -1
@@ -17,6 +19,61 @@ let idleDeck = deckB
 let isPlaying = false
 let isTransitioning = false
 let reportTimer = null
+
+// Ad slideshow between songs - a deliberate break, not a crossfade (see
+// onTimeUpdate/onEnded below). adImages is refreshed from the folder on
+// disk whenever settings change, not just once at startup, so adding
+// images to the folder mid-shift is picked up without a restart.
+let adsEnabled = false
+let adsEverySongs = 4
+let adsSecondsPerImage = 6
+let adImages = []
+let songsPlayedSinceAd = 0
+
+function adBreakDue() {
+  return adsEnabled && adImages.length > 0 && songsPlayedSinceAd >= adsEverySongs
+}
+
+async function refreshAdImages() {
+  try {
+    const result = await jukebox.listAdImages()
+    adImages = result?.files || []
+  } catch {
+    adImages = []
+  }
+}
+
+// Shows every image in the folder once, in a shuffled order (so a
+// break doesn't play the exact same sequence every single time),
+// silent, for adsSecondsPerImage each - a skipped/broken image just
+// moves on immediately rather than sitting on a blank frame for the
+// full duration.
+function showAdImage(image) {
+  return new Promise((resolve) => {
+    let done = false
+    function finish() {
+      if (done) return
+      done = true
+      adImageEl.removeEventListener('error', finish)
+      resolve()
+    }
+    adImageEl.addEventListener('error', finish, { once: true })
+    adImageEl.src = fileUrl(image.path)
+    setTimeout(finish, adsSecondsPerImage * 1000)
+  })
+}
+
+async function playAdBreak() {
+  if (!adImages.length) return
+  reportState({ status: 'ad-break' })
+  const shuffled = [...adImages].sort(() => Math.random() - 0.5)
+  adOverlay.classList.add('active')
+  for (const image of shuffled) {
+    await showAdImage(image)
+  }
+  adOverlay.classList.remove('active')
+  adImageEl.removeAttribute('src')
+}
 
 function otherDeck(deck) {
   return deck === deckA ? deckB : deckA
@@ -177,21 +234,36 @@ async function beginCrossfade() {
   idleDeck = outgoing
   currentIndex = nextIndex
   isTransitioning = false
+  songsPlayedSinceAd += 1
   reportState({ status: 'playing' })
 }
 
 function onTimeUpdate() {
-  if (!isTransitioning && activeDeck.duration && activeDeck.duration - activeDeck.currentTime <= crossfadeSeconds) {
+  // An ad break is due next - let this track play all the way to its
+  // real end (skip the early crossfade) so it ends cleanly rather than
+  // fading into the next song right before cutting to a slideshow.
+  if (!isTransitioning && !adBreakDue() && activeDeck.duration && activeDeck.duration - activeDeck.currentTime <= crossfadeSeconds) {
     beginCrossfade()
   }
 }
 
-function onEnded() {
+async function onEnded() {
   // Fallback for a clip shorter than the crossfade window, or the last
   // track in the queue - crossfade logic above should normally have
-  // already handled the swap before this ever fires.
+  // already handled the swap before this ever fires. Also the primary
+  // path when an ad break is due, since onTimeUpdate deliberately skips
+  // the early crossfade in that case so the track reaches a real end.
   if (isTransitioning) return
-  playIndex(currentIndex + 1)
+  const nextIndex = currentIndex + 1
+  if (adBreakDue() && nextIndex < queue.length) {
+    songsPlayedSinceAd = 0
+    activeDeck.classList.remove('active')
+    await playAdBreak()
+    playIndex(nextIndex)
+    return
+  }
+  songsPlayedSinceAd += 1
+  playIndex(nextIndex)
 }
 
 for (const deck of [deckA, deckB]) {
@@ -232,10 +304,18 @@ jukebox.onSettingsUpdated((settings) => {
   crossfadeSeconds = settings.crossfadeSeconds
   volume = settings.volume
   setDeckTransitionDuration(crossfadeSeconds)
+  adsEnabled = Boolean(settings.adsEnabled)
+  adsEverySongs = settings.adsEverySongs
+  adsSecondsPerImage = settings.adsSecondsPerImage
+  refreshAdImages()
 })
 
 jukebox.getSettings().then((settings) => {
   crossfadeSeconds = settings.crossfadeSeconds
   volume = settings.volume
   setDeckTransitionDuration(crossfadeSeconds)
+  adsEnabled = Boolean(settings.adsEnabled)
+  adsEverySongs = settings.adsEverySongs
+  adsSecondsPerImage = settings.adsSecondsPerImage
+  refreshAdImages()
 })

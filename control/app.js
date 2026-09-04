@@ -3,7 +3,7 @@ let library = []            // [{path, filename, size, mtimeMs, key, duration, t
 let metadataCache = {}      // key -> {artist, genre, decade, confidence}
 let playlists = []          // [{id, name, trackKeys: []}]
 let queue = { tracks: [], currentIndex: 0 }
-let settings = { mediaFolder: '', crossfadeSeconds: 3, volume: 1 }
+let settings = { mediaFolder: '', crossfadeSeconds: 3, volume: 1, adsEnabled: false, adsFolder: '', adsEverySongs: 4, adsSecondsPerImage: 6 }
 let searchQuery = ''
 let groupBy = ''
 
@@ -59,11 +59,41 @@ async function loadSettings() {
   document.getElementById('library-folder-label').textContent = settings.mediaFolder
     ? `Folder: ${settings.mediaFolder}`
     : 'No media folder set — go to Settings.'
+
+  document.getElementById('ads-enabled-toggle').checked = Boolean(settings.adsEnabled)
+  document.getElementById('ads-folder').value = settings.adsFolder || ''
+  document.getElementById('ads-every-slider').value = settings.adsEverySongs
+  document.getElementById('ads-every-value').textContent = settings.adsEverySongs
+  document.getElementById('ads-every-plural').textContent = settings.adsEverySongs === 1 ? '' : 's'
+  document.getElementById('ads-seconds-slider').value = settings.adsSecondsPerImage
+  document.getElementById('ads-seconds-value').textContent = settings.adsSecondsPerImage
 }
 
 document.getElementById('choose-folder-btn').addEventListener('click', async () => {
   const folder = await jukebox.chooseMediaFolder()
   if (folder) { await loadSettings(); await rescanLibrary() }
+})
+
+document.getElementById('ads-enabled-toggle').addEventListener('change', async (e) => {
+  settings.adsEnabled = e.target.checked
+  await jukebox.saveSettings(settings)
+})
+document.getElementById('choose-ads-folder-btn').addEventListener('click', async () => {
+  const folder = await jukebox.chooseAdsFolder()
+  if (folder) await loadSettings()
+})
+document.getElementById('ads-every-slider').addEventListener('input', async (e) => {
+  const n = Number(e.target.value)
+  document.getElementById('ads-every-value').textContent = n
+  document.getElementById('ads-every-plural').textContent = n === 1 ? '' : 's'
+  settings.adsEverySongs = n
+  await jukebox.saveSettings(settings)
+})
+document.getElementById('ads-seconds-slider').addEventListener('input', async (e) => {
+  const n = Number(e.target.value)
+  document.getElementById('ads-seconds-value').textContent = n
+  settings.adsSecondsPerImage = n
+  await jukebox.saveSettings(settings)
 })
 
 document.getElementById('crossfade-slider').addEventListener('input', async (e) => {
@@ -475,7 +505,9 @@ async function shuffleUpcoming() {
 
 jukebox.onPlayerState((state) => {
   lastPlayerState = state
-  document.getElementById('np-title').textContent = state.currentTrack ? state.currentTrack.filename : 'Nothing playing'
+  document.getElementById('np-title').textContent = state.status === 'ad-break'
+    ? 'Ad break'
+    : (state.currentTrack ? state.currentTrack.filename : 'Nothing playing')
   document.getElementById('np-time').textContent = fmtTime(state.timeElapsed)
   document.getElementById('np-duration').textContent = fmtTime(state.duration)
   const pct = state.duration ? (state.timeElapsed / state.duration) * 100 : 0

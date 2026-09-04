@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('jukebox', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   onSettingsUpdated: (callback) => ipcRenderer.on('settings:updated', (_event, settings) => callback(settings)),
+  listAdImages: () => ipcRenderer.invoke('ads-folder:list'),
 
   onLoadQueue: (callback) => ipcRenderer.on('player:load-queue', (_event, payload) => callback(payload)),
   onUpdateQueue: (callback) => ipcRenderer.on('player:update-queue', (_event, tracks) => callback(tracks)),

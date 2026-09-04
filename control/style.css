@@ -40,6 +40,15 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .settings-form{display:grid;gap:20px;max-width:480px}
 .settings-form label{display:grid;gap:8px;font-weight:700}
 .settings-form input[readonly]{flex:1;background:#f4f7f6}
+.ads-form{margin-top:14px;padding-top:20px;border-top:1px solid #e2e8ea}
+.toggle-row{display:flex!important;flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
+.toggle-switch{display:inline-block;position:relative;width:46px;height:26px;flex:0 0 auto}
+.toggle-switch input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer;z-index:1}
+.toggle-track{position:absolute;inset:0;background:#c7d4d6;border-radius:999px;transition:background .15s}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px #0003;transition:transform .15s}
+.toggle-switch input:checked+.toggle-track{background:#2b7182}
+.toggle-switch input:checked+.toggle-track .toggle-thumb{transform:translateX(20px)}
+.toggle-switch input:focus-visible+.toggle-track{outline:2px solid #2b7182;outline-offset:2px}
 .danger-zone{margin-top:14px;padding-top:20px;border-top:1px solid #e2e8ea}
 .now-playing{position:fixed;bottom:0;left:0;right:0;background:#173F4F;color:#fff;padding:12px 22px;display:flex;justify-content:space-between;align-items:center;gap:20px;box-shadow:0 -2px 12px #0003}
 .np-info{flex:1;min-width:0}

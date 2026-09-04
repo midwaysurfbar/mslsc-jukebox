@@ -68,6 +68,24 @@
           <input id="volume-slider" type="range" min="0" max="100" step="5" value="100" />
         </label>
       </div>
+      <div class="settings-form ads-form">
+        <label class="toggle-row">
+          <span>Ad slideshow between songs</span>
+          <span class="toggle-switch">
+            <input id="ads-enabled-toggle" type="checkbox" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </span>
+        </label>
+        <label><span>Ad images folder</span>
+          <div class="button-row"><input id="ads-folder" readonly /><button class="secondary" id="choose-ads-folder-btn">Choose…</button></div>
+        </label>
+        <label><span>Show a slideshow every <b id="ads-every-value">4</b> song<span id="ads-every-plural">s</span></span>
+          <input id="ads-every-slider" type="range" min="1" max="15" step="1" value="4" />
+        </label>
+        <label><span>Seconds per image: <b id="ads-seconds-value">6</b>s</span>
+          <input id="ads-seconds-slider" type="range" min="2" max="20" step="1" value="6" />
+        </label>
+      </div>
       <div class="settings-form danger-zone">
         <label><span>Start fresh</span>
           <p class="eyebrow">Clears every playlist, the queue, and cached thumbnails/conversions, and un-sets the media folder — as if the app were freshly installed. Your actual video files are never touched, only re-selected next time.</p>

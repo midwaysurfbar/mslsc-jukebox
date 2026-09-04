@@ -27,6 +27,7 @@ const FFMPEG_PATH = app.isPackaged
 // the only thing both sides can reach.
 
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mkv', '.mov', '.m4v'])
+const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
 
 const USER_DATA = app.getPath('userData')
 const SETTINGS_PATH = path.join(USER_DATA, 'settings.json')
@@ -36,7 +37,17 @@ const METADATA_PATH = path.join(USER_DATA, 'metadata.json')
 const THUMBNAILS_DIR = path.join(USER_DATA, 'thumbnails')
 const CONVERTED_DIR = path.join(USER_DATA, 'converted')
 
-const DEFAULT_SETTINGS = { mediaFolder: '', crossfadeSeconds: 3, volume: 1 }
+const DEFAULT_SETTINGS = {
+  mediaFolder: '',
+  crossfadeSeconds: 3,
+  volume: 1,
+  // Ad slideshow between songs - off by default (adsEnabled false, and
+  // adsFolder empty either way means nothing to show even if enabled).
+  adsEnabled: false,
+  adsFolder: '',
+  adsEverySongs: 4,
+  adsSecondsPerImage: 6,
+}
 
 function readJson(filePath, fallback) {
   try {
@@ -91,6 +102,28 @@ function walkVideoFiles(dir, results = []) {
     } else if (VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       const stat = fs.statSync(full)
       results.push({ path: full, filename: entry.name, size: stat.size, mtimeMs: stat.mtimeMs, key: fileKey(full, stat.size) })
+    }
+  }
+  return results
+}
+
+// Same idea as walkVideoFiles, for the ad slideshow's image folder - no
+// caching/conversion needed for a still image, so this just returns
+// paths, not the richer {size, mtimeMs, key} shape videos need.
+function walkImageFiles(dir, results = []) {
+  let entries
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return results
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      walkImageFiles(full, results)
+    } else if (IMAGE_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+      results.push({ path: full, filename: entry.name })
     }
   }
   return results
@@ -218,6 +251,22 @@ ipcMain.handle('media-folder:list', () => {
   const files = walkVideoFiles(settings.mediaFolder)
   const prunedCount = files.length > 0 ? pruneOrphanedCacheFiles(new Set(files.map((r) => r.key))) : 0
   return { files, prunedCount }
+})
+
+ipcMain.handle('ads-folder:choose', async () => {
+  const result = await dialog.showOpenDialog(controlWindow, { properties: ['openDirectory'] })
+  if (result.canceled || result.filePaths.length === 0) return null
+  const folder = result.filePaths[0]
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), adsFolder: folder }
+  writeJson(SETTINGS_PATH, settings)
+  if (displayWindow) displayWindow.webContents.send('settings:updated', settings)
+  return folder
+})
+
+ipcMain.handle('ads-folder:list', () => {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  if (!settings.adsFolder) return { files: [] }
+  return { files: walkImageFiles(settings.adsFolder) }
 })
 
 ipcMain.handle('playlists:get-all', () => readJson(PLAYLISTS_PATH, []))
