@@ -20,10 +20,15 @@ let isPlaying = false
 let isTransitioning = false
 let reportTimer = null
 
-// Ad slideshow between songs - a deliberate break, not a crossfade (see
-// onTimeUpdate/onEnded below). adImages is refreshed from the folder on
-// disk whenever settings change, not just once at startup, so adding
-// images to the folder mid-shift is picked up without a restart.
+// Ad slideshow between songs - a pure visual overlay on top of whatever
+// is already playing (mid-song or mid-crossfade), never a pause/
+// interruption. Real video-DJ-software feel: music (and video) keeps
+// running underneath the whole time, at full volume, on its own normal
+// schedule - the overlay just covers the screen for a while and then
+// gets out of the way, revealing whatever's playing by then. adImages
+// is refreshed from the folder on disk whenever settings change, not
+// just once at startup, so adding images to the folder mid-shift is
+// picked up without a restart.
 let adsEnabled = false
 let adsEverySongs = 4
 let adsSecondsPerImage = 6
@@ -32,6 +37,19 @@ let songsPlayedSinceAd = 0
 
 function adBreakDue() {
   return adsEnabled && adImages.length > 0 && songsPlayedSinceAd >= adsEverySongs
+}
+
+// Called at every natural song transition (crossfade start, or a plain
+// advance when there's no crossfade to have). Counts toward the next ad
+// break, and fires one - without awaiting it - the moment it's due, so
+// the transition itself (crossfade or straight cut) proceeds completely
+// normally in parallel.
+function noteSongTransition() {
+  songsPlayedSinceAd += 1
+  if (adBreakDue()) {
+    songsPlayedSinceAd = 0
+    playAdBreak()
+  }
 }
 
 async function refreshAdImages() {
@@ -44,10 +62,11 @@ async function refreshAdImages() {
 }
 
 // Shows every image in the folder once, in a shuffled order (so a
-// break doesn't play the exact same sequence every single time),
-// silent, for adsSecondsPerImage each - a skipped/broken image just
-// moves on immediately rather than sitting on a blank frame for the
-// full duration.
+// break doesn't play the exact same sequence every single time), for
+// adsSecondsPerImage each - a skipped/broken image just moves on
+// immediately rather than sitting on a blank frame for the full
+// duration. Runs entirely independently of playback - never awaited by
+// anything that advances the queue.
 function showAdImage(image) {
   return new Promise((resolve) => {
     let done = false
@@ -63,9 +82,14 @@ function showAdImage(image) {
   })
 }
 
+let adBreakInProgress = false
+
 async function playAdBreak() {
-  if (!adImages.length) return
-  reportState({ status: 'ad-break' })
+  // Never stack two breaks - if one's still showing (a very short
+  // adsEverySongs setting on very short clips), just skip this one
+  // rather than queue up a second slideshow behind it.
+  if (!adImages.length || adBreakInProgress) return
+  adBreakInProgress = true
   const shuffled = [...adImages].sort(() => Math.random() - 0.5)
   adOverlay.classList.add('active')
   for (const image of shuffled) {
@@ -73,6 +97,7 @@ async function playAdBreak() {
   }
   adOverlay.classList.remove('active')
   adImageEl.removeAttribute('src')
+  adBreakInProgress = false
 }
 
 function otherDeck(deck) {
@@ -197,6 +222,9 @@ async function beginCrossfade() {
   const nextIndex = currentIndex + 1
   if (nextIndex >= queue.length) return // nothing to crossfade into - let it just play out and end naturally
   isTransitioning = true
+  // Fires (if due) right as the crossfade starts, not awaited - the ad
+  // overlays on top of the crossfade in progress, it never gates it.
+  noteSongTransition()
 
   const outgoing = activeDeck
   const incoming = idleDeck
@@ -234,36 +262,22 @@ async function beginCrossfade() {
   idleDeck = outgoing
   currentIndex = nextIndex
   isTransitioning = false
-  songsPlayedSinceAd += 1
   reportState({ status: 'playing' })
 }
 
 function onTimeUpdate() {
-  // An ad break is due next - let this track play all the way to its
-  // real end (skip the early crossfade) so it ends cleanly rather than
-  // fading into the next song right before cutting to a slideshow.
-  if (!isTransitioning && !adBreakDue() && activeDeck.duration && activeDeck.duration - activeDeck.currentTime <= crossfadeSeconds) {
+  if (!isTransitioning && activeDeck.duration && activeDeck.duration - activeDeck.currentTime <= crossfadeSeconds) {
     beginCrossfade()
   }
 }
 
-async function onEnded() {
+function onEnded() {
   // Fallback for a clip shorter than the crossfade window, or the last
   // track in the queue - crossfade logic above should normally have
-  // already handled the swap before this ever fires. Also the primary
-  // path when an ad break is due, since onTimeUpdate deliberately skips
-  // the early crossfade in that case so the track reaches a real end.
+  // already handled the swap before this ever fires.
   if (isTransitioning) return
-  const nextIndex = currentIndex + 1
-  if (adBreakDue() && nextIndex < queue.length) {
-    songsPlayedSinceAd = 0
-    activeDeck.classList.remove('active')
-    await playAdBreak()
-    playIndex(nextIndex)
-    return
-  }
-  songsPlayedSinceAd += 1
-  playIndex(nextIndex)
+  noteSongTransition()
+  playIndex(currentIndex + 1)
 }
 
 for (const deck of [deckA, deckB]) {

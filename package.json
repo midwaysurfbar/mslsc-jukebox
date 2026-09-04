@@ -2,7 +2,7 @@
   "name": "mslsc-jukebox",
   "productName": "MSLSC Jukebox",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A local video jukebox for the TV connected to the venue PC - library, playlists, queue and crossfade transitions between clips.",
   "author": "Midway Surf Lifesaving Club",
   "main": "main.js",

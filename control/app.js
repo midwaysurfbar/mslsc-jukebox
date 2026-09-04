@@ -505,9 +505,7 @@ async function shuffleUpcoming() {
 
 jukebox.onPlayerState((state) => {
   lastPlayerState = state
-  document.getElementById('np-title').textContent = state.status === 'ad-break'
-    ? 'Ad break'
-    : (state.currentTrack ? state.currentTrack.filename : 'Nothing playing')
+  document.getElementById('np-title').textContent = state.currentTrack ? state.currentTrack.filename : 'Nothing playing'
   document.getElementById('np-time').textContent = fmtTime(state.timeElapsed)
   document.getElementById('np-duration').textContent = fmtTime(state.duration)
   const pct = state.duration ? (state.timeElapsed / state.duration) * 100 : 0
