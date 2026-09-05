@@ -275,6 +275,62 @@ function createDisplayWindow() {
   })
 }
 
+// --- Live media-folder watching ---
+//
+// Without this, a new folder/file dropped into the media folder while
+// the app is already open sits invisible until someone clicks Rescan
+// Folder (or restarts the app) - both scan-on-demand, neither notices
+// on their own. This tells Control to quietly re-run that exact same
+// scan the moment something changes on disk.
+//
+// fs.watch's `recursive: true` only actually works on Windows and macOS
+// (Node throws synchronously on Linux) - which covers the real target
+// here (the venue PC is Windows), so that's the primary path. Where it's
+// unavailable, a plain interval poll is a perfectly good fallback: a
+// little slower to notice a change, but it still works, and it's far
+// simpler than hand-rolling recursive watching by tracking one fs.watch
+// per subfolder.
+let mediaWatcher = null
+let mediaPollTimer = null
+let mediaRescanDebounce = null
+
+function stopWatchingMediaFolder() {
+  if (mediaWatcher) { try { mediaWatcher.close() } catch { /* already gone */ } mediaWatcher = null }
+  if (mediaPollTimer) { clearInterval(mediaPollTimer); mediaPollTimer = null }
+  if (mediaRescanDebounce) { clearTimeout(mediaRescanDebounce); mediaRescanDebounce = null }
+}
+
+// Debounced - a real copy operation (or this app's own Sort/Move actions)
+// fires many filesystem events in quick succession, and there's no
+// reason to tell Control to rescan more than once per burst of activity.
+function notifyMediaFolderChanged() {
+  if (mediaRescanDebounce) clearTimeout(mediaRescanDebounce)
+  mediaRescanDebounce = setTimeout(() => {
+    if (controlWindow) controlWindow.webContents.send('media-folder:changed')
+  }, 1200)
+}
+
+function startWatchingMediaFolder(mediaFolder) {
+  stopWatchingMediaFolder()
+  if (!mediaFolder) return
+  try {
+    mediaWatcher = fs.watch(mediaFolder, { recursive: true }, () => notifyMediaFolderChanged())
+    // A watched drive/network share disappearing (unplugged, share down)
+    // surfaces here as an 'error', not a thrown exception - not fatal,
+    // and not this app's job to recover from mid-flight; the next
+    // successful scan (manual or once the watcher is restarted) picks
+    // back up normally, same as every other media-folder-unreachable
+    // case already handled elsewhere (see pruneOrphanedCacheFiles).
+    mediaWatcher.on('error', () => {})
+  } catch {
+    // recursive watching isn't supported on this platform (Linux) -
+    // fall back to a plain poll. 8s keeps this cheap (just a debounced
+    // IPC message, not a scan itself - Control decides what to do with it).
+    mediaWatcher = null
+    mediaPollTimer = setInterval(() => notifyMediaFolderChanged(), 8000)
+  }
+}
+
 // --- IPC: settings / playlists / queue (plain JSON read/write in main) ---
 
 ipcMain.handle('settings:get', () => ({ ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }))
@@ -290,6 +346,7 @@ ipcMain.handle('media-folder:choose', async () => {
   const folder = result.filePaths[0]
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), mediaFolder: folder }
   writeJson(SETTINGS_PATH, settings)
+  startWatchingMediaFolder(folder)
   return folder
 })
 
@@ -492,6 +549,7 @@ ipcMain.handle('library:reset-all', () => {
   fs.rmSync(CONVERTED_DIR, { recursive: true, force: true })
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), mediaFolder: '' }
   writeJson(SETTINGS_PATH, settings)
+  stopWatchingMediaFolder()
   if (displayWindow) {
     displayWindow.webContents.send('settings:updated', settings)
     displayWindow.webContents.send('player:load-queue', { tracks: [], startIndex: 0 })
@@ -721,10 +779,13 @@ app.whenReady().then(() => {
   createDisplayWindow()
   createTray()
   setupAutoUpdate()
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  startWatchingMediaFolder(settings.mediaFolder)
 })
 
 app.on('before-quit', () => {
   isQuitting = true
+  stopWatchingMediaFolder()
 })
 
 app.on('window-all-closed', () => {

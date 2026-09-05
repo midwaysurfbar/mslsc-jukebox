@@ -66,4 +66,10 @@ contextBridge.exposeInMainWorld('jukebox', {
 
   // Player state (relayed back from the Display window)
   onPlayerState: (callback) => ipcRenderer.on('player:state', (_event, state) => callback(state)),
+
+  // Fires (debounced) whenever main's live filesystem watch notices a
+  // change under the media folder - a new folder, added/removed/moved
+  // files, all of it - so Control can silently re-run the same scan
+  // Rescan Folder triggers manually, without anyone having to click it.
+  onMediaFolderChanged: (callback) => ipcRenderer.on('media-folder:changed', () => callback()),
 })

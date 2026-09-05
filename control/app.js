@@ -202,13 +202,18 @@ async function rescanLibrary() {
   document.getElementById('library-status').textContent = 'Scanning…'
   const { files, prunedCount, playlists: syncedPlaylists } = await jukebox.listVideos()
   metadataCache = await jukebox.getMetadataCache()
-  library = files
+  // Reconciling by key (rather than wholesale replacing `library`) means
+  // a track that hasn't actually changed keeps its already-generated
+  // thumbnail/duration, and only genuinely new files do the <video>+
+  // <canvas> thumbnail pass below - important now that a rescan can also
+  // fire automatically from the live folder watch (see main.onMediaFolderChanged
+  // below), not just a manual click, so it needs to stay cheap even when
+  // it runs often on an otherwise-unchanged library.
+  const newOnes = reconcileLibrary(files)
   // Folder-based playlists (see syncFolderPlaylists in main.js) are
   // recalculated on every scan - a file already sitting in a subfolder
   // gets swept into that playlist right here, not just newly-added ones.
   playlists = syncedPlaylists
-  // Thumbnails/duration are generated a few at a time, not all at once,
-  // so a big library doesn't freeze the UI - re-render as each batch lands.
   // A rescan also clears out any cached thumbnail/converted-video file
   // that no longer matches a real video (see pruneOrphanedCacheFiles in
   // main.js) - worth a mention when it actually does something, since
@@ -221,14 +226,23 @@ async function rescanLibrary() {
       : ''
   renderLibrary()
   renderPlaylists()
+  // Thumbnails/duration are generated a few at a time, not all at once,
+  // so a big batch of new files doesn't freeze the UI - re-render as each
+  // batch lands.
   const BATCH = 4
-  for (let i = 0; i < library.length; i += BATCH) {
-    await Promise.all(library.slice(i, i + BATCH).map(generateThumbAndDuration))
+  for (let i = 0; i < newOnes.length; i += BATCH) {
+    await Promise.all(newOnes.slice(i, i + BATCH).map(generateThumbAndDuration))
     renderLibrary()
   }
 }
 
 document.getElementById('rescan-btn').addEventListener('click', rescanLibrary)
+
+// The live folder watch (main.js) tells us whenever something changes
+// under the media folder - a new folder, added/removed/moved files, all
+// of it - so a rescan can happen on its own, without anyone needing to
+// click Rescan Folder or restart the app.
+jukebox.onMediaFolderChanged(rescanLibrary)
 
 // Reconciles a fresh main-process file listing (from a move/sort action,
 // not a full Rescan) with the client's existing `library` array, which
