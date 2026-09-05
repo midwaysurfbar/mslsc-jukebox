@@ -208,6 +208,45 @@ document.getElementById('enrich-btn').addEventListener('click', async () => {
   renderLibrary()
 })
 
+// Physically sorts whatever's still loose in the media folder's root into
+// decade subfolders (1980s, 1990s, ...) based on the same iTunes lookup
+// "Enrich Library" already uses - files already sitting in any folder are
+// never touched. Enriches first (in this renderer, same as Enrich Library)
+// so the move step in main has real metadata to decide from, rather than
+// treating an un-enriched track as "no confident match, leave it".
+document.getElementById('sort-decade-btn').addEventListener('click', async () => {
+  const status = document.getElementById('library-status')
+  const unsorted = library.filter((t) => !t.folder)
+  if (!unsorted.length) { status.textContent = 'Nothing to sort - every file is already in a folder.'; return }
+
+  const sure = confirm(
+    `This physically moves files into folders like "1980s"/"1990s" based on a best-guess lookup - it does not just organize the library view.\n\n` +
+    `Only files not already in ANY folder are considered (${unsorted.length} of ${library.length}), and only a confident match is moved - ` +
+    `anything uncertain is left exactly where it is.\n\n` +
+    'Moved files cannot be automatically put back - continue?'
+  )
+  if (!sure) return
+
+  for (let i = 0; i < unsorted.length; i++) {
+    const track = unsorted[i]
+    if (metadataCache[track.key]) continue
+    status.textContent = `Checking ${i + 1}/${unsorted.length} for a decade match…`
+    metadataCache[track.key] = await jukebox.lookupMetadata(track.key, track.filename)
+  }
+
+  status.textContent = 'Moving matched files…'
+  const result = await jukebox.sortUnsortedByDecade()
+  library = result.files
+  playlists = result.playlists
+  queue = result.queue
+  status.textContent = result.moved
+    ? `Moved ${result.moved} file${result.moved === 1 ? '' : 's'} into decade folders. ${result.skipped} had no confident match and were left in place.`
+    : `No confident decade matches among the ${result.skipped} unsorted file${result.skipped === 1 ? '' : 's'} - nothing moved.`
+  renderLibrary()
+  renderPlaylists()
+  renderQueue()
+})
+
 document.getElementById('library-search').addEventListener('input', (e) => { searchQuery = e.target.value.toLowerCase(); renderLibrary() })
 document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; renderLibrary() })
 

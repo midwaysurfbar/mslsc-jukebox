@@ -306,6 +306,89 @@ ipcMain.handle('media-folder:list', () => {
   return { files, prunedCount, playlists }
 })
 
+// Physically relocates files into decade subfolders (e.g. "1980s") based
+// on the iTunes-lookup metadata Control already cached for them - the one
+// place in the app that moves a real source file rather than only ever
+// reading it (contrast library:delete-file, which removes one; every
+// other library action never touches a source file at all). Kept
+// deliberately conservative on both axes that matter for something this
+// hard to undo automatically:
+//   - Only ever considers files still sitting loose in the media folder's
+//     root (file.folder === '') - anything you've already organized into
+//     a folder yourself, under any name, is left completely alone.
+//   - Only moves a 'high'-confidence or manually-corrected match - a
+//     fuzzy/low-confidence guess is left in place rather than risk
+//     mis-filing it somewhere you'd have to go hunting for it.
+// Renaming a file changes its key (md5 of path+size, see fileKey above),
+// so every reference to the old key - its cached thumbnail/converted
+// copy, its metadata entry, any playlist, the queue - is carried over to
+// the new key rather than left dangling.
+ipcMain.handle('library:sort-unsorted-by-decade', () => {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
+  if (!mediaFolder) return { moved: 0, skipped: 0, files: [], playlists: readJson(PLAYLISTS_PATH, []), queue: readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 }) }
+
+  const files = walkVideoFiles(mediaFolder, mediaFolder)
+  const metadata = readJson(METADATA_PATH, {})
+  const keyRemap = {}
+  let moved = 0
+  let skipped = 0
+
+  for (const file of files) {
+    if (file.folder) continue // already organized into some folder - not this feature's business
+    const meta = metadata[file.key]
+    const confident = meta && meta.decade && meta.decade !== 'Unknown' && (meta.confidence === 'high' || meta.confidence === 'manual')
+    if (!confident) { skipped += 1; continue }
+
+    const targetDir = path.join(mediaFolder, meta.decade)
+    fs.mkdirSync(targetDir, { recursive: true })
+    let destName = file.filename
+    let destPath = path.join(targetDir, destName)
+    if (fs.existsSync(destPath)) {
+      const ext = path.extname(destName)
+      const base = path.basename(destName, ext)
+      let n = 2
+      while (fs.existsSync(destPath)) {
+        destName = `${base} (${n})${ext}`
+        destPath = path.join(targetDir, destName)
+        n += 1
+      }
+    }
+    fs.renameSync(file.path, destPath)
+    keyRemap[file.key] = fileKey(destPath, file.size)
+    moved += 1
+  }
+
+  for (const [oldKey, newKey] of Object.entries(keyRemap)) {
+    for (const [dir, ext] of [[THUMBNAILS_DIR, '.jpg'], [CONVERTED_DIR, '.mp4']]) {
+      const oldPath = path.join(dir, `${oldKey}${ext}`)
+      if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(dir, `${newKey}${ext}`))
+    }
+    if (metadata[oldKey]) {
+      metadata[newKey] = metadata[oldKey]
+      delete metadata[oldKey]
+    }
+  }
+  writeJson(METADATA_PATH, metadata)
+
+  const remapKeys = (keys) => keys.map((k) => keyRemap[k] || k)
+  let playlists = readJson(PLAYLISTS_PATH, []).map((p) => ({ ...p, trackKeys: remapKeys(p.trackKeys) }))
+  writeJson(PLAYLISTS_PATH, playlists)
+
+  const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
+  queue.tracks = remapKeys(queue.tracks)
+  writeJson(QUEUE_PATH, queue)
+
+  // Re-scan for the real, final state (new folders now exist on disk) and
+  // let the existing folder-playlist sync pick up the newly-created decade
+  // folders exactly like any other folder a person made by hand.
+  const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
+  playlists = rescannedFiles.length > 0 ? syncFolderPlaylists(rescannedFiles) : playlists
+  const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
+
+  return { moved, skipped, files: rescannedFiles, playlists, queue, prunedCount }
+})
+
 ipcMain.handle('ads-folder:choose', async () => {
   const result = await dialog.showOpenDialog(controlWindow, { properties: ['openDirectory'] })
   if (result.canceled || result.filePaths.length === 0) return null

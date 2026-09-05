@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld('jukebox', {
   // playlists/queue with every reference to it already removed.
   deleteFile: (key, filePath) => ipcRenderer.invoke('library:delete-file', key, filePath),
 
+  // Physically moves confidently-matched, currently-unsorted files into
+  // decade subfolders (e.g. "1980s") based on cached metadata - see
+  // library:sort-unsorted-by-decade in main.js for exactly what "confident"
+  // and "unsorted" mean here.
+  sortUnsortedByDecade: () => ipcRenderer.invoke('library:sort-unsorted-by-decade'),
+
   // Thumbnails (generated in this renderer via <video>+<canvas>, saved via main)
   saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
   getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),
