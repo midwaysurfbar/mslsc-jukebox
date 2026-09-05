@@ -51,7 +51,13 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .toggle-switch input:checked+.toggle-track .toggle-thumb{transform:translateX(20px)}
 .toggle-switch input:focus-visible+.toggle-track{outline:2px solid #2b7182;outline-offset:2px}
 .danger-zone{margin-top:14px;padding-top:20px;border-top:1px solid #e2e8ea}
-.modal-backdrop{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;z-index:20}
+/* display:none is the default, flex only when actually shown - an
+   unconditional display:flex here would override the browser's own
+   [hidden]{display:none} handling of the modal's `hidden` attribute
+   (same specificity, but this is an author rule vs the browser's default
+   stylesheet), leaving it visible on every launch regardless of hidden. */
+.modal-backdrop{display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;z-index:20}
+.modal-backdrop:not([hidden]){display:flex}
 .modal-card{background:#fff;border-radius:12px;padding:22px;width:340px;max-width:90vw;display:grid;gap:12px;box-shadow:0 8px 30px #0004}
 .modal-card h2{margin:0;font-size:1.1rem;color:#173F4F}
 .modal-card input{width:100%}
