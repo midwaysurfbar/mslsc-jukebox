@@ -110,6 +110,22 @@
     </div>
   </footer>
 
+  <!-- Electron doesn't implement window.prompt() at all (it throws
+       "prompt() is not supported" - confirmed by hand, confirm()/alert()
+       are fine, prompt() specifically is not), so "New folder…" needs its
+       own tiny text-input dialog rather than the browser-native one. -->
+  <div id="new-folder-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <h2>New folder</h2>
+      <p class="eyebrow">Creates a real folder inside your media folder, with a matching playlist.</p>
+      <input id="new-folder-input" placeholder="e.g. Christmas" />
+      <div class="button-row" style="justify-content:flex-end">
+        <button class="secondary" id="new-folder-cancel">Cancel</button>
+        <button class="primary" id="new-folder-create">Create</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

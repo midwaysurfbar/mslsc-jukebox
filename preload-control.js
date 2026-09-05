@@ -33,6 +33,10 @@ contextBridge.exposeInMainWorld('jukebox', {
   // and "unsorted" mean here.
   sortUnsortedByDecade: () => ipcRenderer.invoke('library:sort-unsorted-by-decade'),
 
+  // Moves one file into an existing (or brand-new) folder - how a track
+  // "joins" a folder-synced playlist from the Library's own picker.
+  moveFileToFolder: (filePath, folderPath) => ipcRenderer.invoke('library:move-file-to-folder', filePath, folderPath),
+
   // Thumbnails (generated in this renderer via <video>+<canvas>, saved via main)
   saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
   getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),

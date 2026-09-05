@@ -306,6 +306,65 @@ ipcMain.handle('media-folder:list', () => {
   return { files, prunedCount, playlists }
 })
 
+// Shared by every action below that moves/renames a real media file -
+// doing so changes its key (md5 of path+size, see fileKey above), so
+// anything that referenced the old key needs to follow it to the new one:
+// its cached thumbnail/converted copy, its metadata guess, every
+// playlist, and the queue. Each store is read and written fresh rather
+// than threaded through callers, since this only ever runs a handful of
+// times per action, never once per file in a hot loop.
+function remapFileKey(oldKey, newKey) {
+  for (const [dir, ext] of [[THUMBNAILS_DIR, '.jpg'], [CONVERTED_DIR, '.mp4']]) {
+    const oldPath = path.join(dir, `${oldKey}${ext}`)
+    if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(dir, `${newKey}${ext}`))
+  }
+
+  const metadata = readJson(METADATA_PATH, {})
+  if (metadata[oldKey]) {
+    metadata[newKey] = metadata[oldKey]
+    delete metadata[oldKey]
+    writeJson(METADATA_PATH, metadata)
+  }
+
+  const playlists = readJson(PLAYLISTS_PATH, [])
+  let playlistsChanged = false
+  for (const p of playlists) {
+    const idx = p.trackKeys.indexOf(oldKey)
+    if (idx >= 0) { p.trackKeys[idx] = newKey; playlistsChanged = true }
+  }
+  if (playlistsChanged) writeJson(PLAYLISTS_PATH, playlists)
+
+  const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
+  if (queue.tracks.includes(oldKey)) {
+    queue.tracks = queue.tracks.map((k) => (k === oldKey ? newKey : k))
+    writeJson(QUEUE_PATH, queue)
+  }
+}
+
+// Moves one real file into `destDir` (creating it if needed), handling a
+// filename collision with a "(2)"-style suffix rather than overwriting
+// anything, then follows its key to the new location via remapFileKey.
+function moveFileTo(sourcePath, size, destDir) {
+  fs.mkdirSync(destDir, { recursive: true })
+  let destName = path.basename(sourcePath)
+  let destPath = path.join(destDir, destName)
+  if (fs.existsSync(destPath) && path.resolve(destPath) !== path.resolve(sourcePath)) {
+    const ext = path.extname(destName)
+    const base = path.basename(destName, ext)
+    let n = 2
+    while (fs.existsSync(destPath)) {
+      destName = `${base} (${n})${ext}`
+      destPath = path.join(destDir, destName)
+      n += 1
+    }
+  }
+  const oldKey = fileKey(sourcePath, size)
+  fs.renameSync(sourcePath, destPath)
+  const newKey = fileKey(destPath, size)
+  remapFileKey(oldKey, newKey)
+  return newKey
+}
+
 // Physically relocates files into decade subfolders (e.g. "1980s") based
 // on the iTunes-lookup metadata Control already cached for them - the one
 // place in the app that moves a real source file rather than only ever
@@ -319,18 +378,14 @@ ipcMain.handle('media-folder:list', () => {
 //   - Only moves a 'high'-confidence or manually-corrected match - a
 //     fuzzy/low-confidence guess is left in place rather than risk
 //     mis-filing it somewhere you'd have to go hunting for it.
-// Renaming a file changes its key (md5 of path+size, see fileKey above),
-// so every reference to the old key - its cached thumbnail/converted
-// copy, its metadata entry, any playlist, the queue - is carried over to
-// the new key rather than left dangling.
 ipcMain.handle('library:sort-unsorted-by-decade', () => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
-  if (!mediaFolder) return { moved: 0, skipped: 0, files: [], playlists: readJson(PLAYLISTS_PATH, []), queue: readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 }) }
+  if (!mediaFolder) return { moved: 0, skipped: 0, movedKeys: {}, files: [], playlists: readJson(PLAYLISTS_PATH, []), queue: readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 }) }
 
   const files = walkVideoFiles(mediaFolder, mediaFolder)
   const metadata = readJson(METADATA_PATH, {})
-  const keyRemap = {}
+  const movedKeys = {} // oldKey -> newKey, so Control can update just the tracks that actually moved
   let moved = 0
   let skipped = 0
 
@@ -339,54 +394,52 @@ ipcMain.handle('library:sort-unsorted-by-decade', () => {
     const meta = metadata[file.key]
     const confident = meta && meta.decade && meta.decade !== 'Unknown' && (meta.confidence === 'high' || meta.confidence === 'manual')
     if (!confident) { skipped += 1; continue }
-
-    const targetDir = path.join(mediaFolder, meta.decade)
-    fs.mkdirSync(targetDir, { recursive: true })
-    let destName = file.filename
-    let destPath = path.join(targetDir, destName)
-    if (fs.existsSync(destPath)) {
-      const ext = path.extname(destName)
-      const base = path.basename(destName, ext)
-      let n = 2
-      while (fs.existsSync(destPath)) {
-        destName = `${base} (${n})${ext}`
-        destPath = path.join(targetDir, destName)
-        n += 1
-      }
-    }
-    fs.renameSync(file.path, destPath)
-    keyRemap[file.key] = fileKey(destPath, file.size)
+    movedKeys[file.key] = moveFileTo(file.path, file.size, path.join(mediaFolder, meta.decade))
     moved += 1
   }
-
-  for (const [oldKey, newKey] of Object.entries(keyRemap)) {
-    for (const [dir, ext] of [[THUMBNAILS_DIR, '.jpg'], [CONVERTED_DIR, '.mp4']]) {
-      const oldPath = path.join(dir, `${oldKey}${ext}`)
-      if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(dir, `${newKey}${ext}`))
-    }
-    if (metadata[oldKey]) {
-      metadata[newKey] = metadata[oldKey]
-      delete metadata[oldKey]
-    }
-  }
-  writeJson(METADATA_PATH, metadata)
-
-  const remapKeys = (keys) => keys.map((k) => keyRemap[k] || k)
-  let playlists = readJson(PLAYLISTS_PATH, []).map((p) => ({ ...p, trackKeys: remapKeys(p.trackKeys) }))
-  writeJson(PLAYLISTS_PATH, playlists)
-
-  const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
-  queue.tracks = remapKeys(queue.tracks)
-  writeJson(QUEUE_PATH, queue)
 
   // Re-scan for the real, final state (new folders now exist on disk) and
   // let the existing folder-playlist sync pick up the newly-created decade
   // folders exactly like any other folder a person made by hand.
   const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
-  playlists = rescannedFiles.length > 0 ? syncFolderPlaylists(rescannedFiles) : playlists
+  const playlists = rescannedFiles.length > 0 ? syncFolderPlaylists(rescannedFiles) : readJson(PLAYLISTS_PATH, [])
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
+  const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
 
-  return { moved, skipped, files: rescannedFiles, playlists, queue, prunedCount }
+  return { moved, skipped, movedKeys, files: rescannedFiles, playlists, queue, prunedCount }
+})
+
+// The interactive, one-track equivalent of organizing files in File
+// Explorer - triggered from the Library's own "+ Playlist" picker on a
+// single tile rather than requiring a trip out to the filesystem.
+// `folderPath` is either an existing folder-playlist's folder or a
+// brand-new name typed on the spot; either way, moving the real file is
+// what makes it "join" that playlist, consistent with folders being the
+// source of truth for these playlists everywhere else in the app.
+// Refuses to resolve outside the media folder - defence in depth, since
+// the UI only ever offers an existing folder name or a freshly-typed one,
+// but this is the one place a bad name could do real damage on disk.
+ipcMain.handle('library:move-file-to-folder', (_event, sourcePath, folderPath) => {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
+  const resolvedSource = path.resolve(sourcePath)
+  if (!mediaFolder || (resolvedSource !== mediaFolder && !resolvedSource.startsWith(mediaFolder + path.sep))) {
+    throw new Error('Refusing to move a file outside the configured media folder.')
+  }
+  const destDir = path.resolve(path.join(mediaFolder, folderPath))
+  if (destDir !== mediaFolder && !destDir.startsWith(mediaFolder + path.sep)) {
+    throw new Error('Refusing to move a file to a folder outside the media folder.')
+  }
+
+  const stat = fs.statSync(resolvedSource)
+  const newKey = moveFileTo(resolvedSource, stat.size, destDir)
+
+  const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
+  const playlists = rescannedFiles.length > 0 ? syncFolderPlaylists(rescannedFiles) : readJson(PLAYLISTS_PATH, [])
+  const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
+  const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
+
+  return { newKey, files: rescannedFiles, playlists, queue, prunedCount }
 })
 
 ipcMain.handle('ads-folder:choose', async () => {

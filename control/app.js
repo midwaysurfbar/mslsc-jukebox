@@ -38,6 +38,39 @@ function fmtBytes(bytes) {
   return `${(bytes / 1e6).toFixed(0)} MB`
 }
 
+// Electron doesn't implement window.prompt() at all (it throws "prompt()
+// is not supported" - window.confirm/alert are fine, prompt specifically
+// isn't), so getting a folder name from the person needs this instead of
+// the browser-native dialog. Resolves the trimmed name, or null on
+// Cancel/Escape/an empty submit.
+function askForFolderName() {
+  const modal = document.getElementById('new-folder-modal')
+  const input = document.getElementById('new-folder-input')
+  input.value = ''
+  modal.hidden = false
+  input.focus()
+  return new Promise((resolve) => {
+    const createBtn = document.getElementById('new-folder-create')
+    const cancelBtn = document.getElementById('new-folder-cancel')
+    function cleanup(value) {
+      modal.hidden = true
+      createBtn.removeEventListener('click', onCreate)
+      cancelBtn.removeEventListener('click', onCancel)
+      input.removeEventListener('keydown', onKeydown)
+      resolve(value)
+    }
+    function onCreate() { cleanup(input.value.trim() || null) }
+    function onCancel() { cleanup(null) }
+    function onKeydown(e) {
+      if (e.key === 'Enter') onCreate()
+      if (e.key === 'Escape') onCancel()
+    }
+    createBtn.addEventListener('click', onCreate)
+    cancelBtn.addEventListener('click', onCancel)
+    input.addEventListener('keydown', onKeydown)
+  })
+}
+
 // --- Tabs ---
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.addEventListener('click', () => {
@@ -197,6 +230,21 @@ async function rescanLibrary() {
 
 document.getElementById('rescan-btn').addEventListener('click', rescanLibrary)
 
+// Reconciles a fresh main-process file listing (from a move/sort action,
+// not a full Rescan) with the client's existing `library` array, which
+// carries client-only UI state - duration, thumbPath, convertedPath,
+// error/needsConversion - that main never knows about. A track whose key
+// didn't change keeps all of that state untouched; anything with a
+// brand-new key just got moved/renamed, so its identity changed - those
+// come back from this function so the caller can regenerate just their
+// thumbnail/duration, rather than either leaving them blank forever or
+// wastefully re-processing the whole library.
+function reconcileLibrary(freshFiles) {
+  const byKey = new Map(library.map((t) => [t.key, t]))
+  library = freshFiles.map((f) => byKey.get(f.key) || f)
+  return library.filter((t) => !byKey.has(t.key))
+}
+
 document.getElementById('enrich-btn').addEventListener('click', async () => {
   const status = document.getElementById('library-status')
   for (let i = 0; i < library.length; i++) {
@@ -236,7 +284,7 @@ document.getElementById('sort-decade-btn').addEventListener('click', async () =>
 
   status.textContent = 'Moving matched files…'
   const result = await jukebox.sortUnsortedByDecade()
-  library = result.files
+  const newOnes = reconcileLibrary(result.files)
   playlists = result.playlists
   queue = result.queue
   status.textContent = result.moved
@@ -245,18 +293,34 @@ document.getElementById('sort-decade-btn').addEventListener('click', async () =>
   renderLibrary()
   renderPlaylists()
   renderQueue()
+  // Only the moved tracks actually need a fresh thumbnail/duration pass -
+  // everything else already has one and reconcileLibrary preserved it.
+  for (const track of newOnes) await generateThumbAndDuration(track)
+  if (newOnes.length) renderLibrary()
 })
 
 document.getElementById('library-search').addEventListener('input', (e) => { searchQuery = e.target.value.toLowerCase(); renderLibrary() })
 document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; renderLibrary() })
 
+// One picker, two different things happening underneath depending on
+// what's chosen - a manual playlist just gets the track key appended
+// (playlists.json), but a folder-synced one can only ever be "joined" by
+// actually moving the file into its folder (folders are the source of
+// truth for those, everywhere else in the app too) - same for the
+// "New folder…" option, which creates one on the spot. moveTrackToFolder
+// handles both of the folder cases; addTrackToPlaylist the manual one.
 function playlistPickerHtml(track) {
-  // Folder-synced playlists are excluded here on purpose - their
-  // membership is recalculated from disk on every rescan, so a manual
-  // add would just be silently undone the next time the library scans.
-  // Move the actual file into that folder instead.
-  const options = playlists.filter((p) => !p.autoFolder).map((p) => `<option value="${p.id}">${p.name}</option>`).join('')
-  return `<select data-add-to-playlist="${track.key}"><option value="">+ Playlist</option>${options}</select>`
+  const manualOptions = playlists.filter((p) => !p.autoFolder)
+    .map((p) => `<option value="playlist:${p.id}">${p.name}</option>`).join('')
+  const folderOptions = playlists.filter((p) => p.autoFolder)
+    .map((p) => `<option value="folder:${p.folderPath}">📁 ${p.name}</option>`).join('')
+  return `
+    <select data-track-picker="${track.key}">
+      <option value="">+ Playlist</option>
+      ${manualOptions}
+      ${folderOptions}
+      <option value="new-folder">📁 New folder…</option>
+    </select>`
 }
 
 function renderTrackTile(track) {
@@ -303,9 +367,17 @@ function renderLibrary() {
 
   grid.querySelectorAll('[data-play-now]').forEach((el) => el.addEventListener('click', () => playNow(el.dataset.playNow)))
   grid.querySelectorAll('[data-add-queue]').forEach((el) => el.addEventListener('click', () => addToQueue(el.dataset.addQueue)))
-  grid.querySelectorAll('[data-add-to-playlist]').forEach((el) => el.addEventListener('change', (e) => {
-    if (e.target.value) addTrackToPlaylist(e.target.value, el.dataset.addToPlaylist)
+  grid.querySelectorAll('[data-track-picker]').forEach((el) => el.addEventListener('change', async (e) => {
+    const trackKey = el.dataset.trackPicker
+    const value = e.target.value
     e.target.value = ''
+    if (!value) return
+    if (value.startsWith('playlist:')) addTrackToPlaylist(value.slice('playlist:'.length), trackKey)
+    else if (value.startsWith('folder:')) moveTrackToFolder(trackKey, value.slice('folder:'.length))
+    else if (value === 'new-folder') {
+      const name = await askForFolderName()
+      if (name) moveTrackToFolder(trackKey, name)
+    }
   }))
   grid.querySelectorAll('[data-convert]').forEach((el) => el.addEventListener('click', () => convertTrack(el.dataset.convert)))
   grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => deleteFile(el.dataset.deleteFile)))
@@ -339,6 +411,39 @@ async function deleteFile(key) {
     jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
   } catch (err) {
     document.getElementById('library-status').textContent = `Could not delete "${track.filename}": ${err.message}`
+  }
+}
+
+// Moves one file into an existing folder-playlist's folder, or a brand
+// new one - the only way to "add" a track to one of these, since their
+// membership always comes from where the file actually is. reconcileLibrary
+// preserves every other track's thumbnail/duration; only this one track
+// (new key, since its path changed) gets its thumbnail regenerated - cheap,
+// since remapFileKey already carried its cached thumbnail/converted copy
+// over to the new key, so generateThumbAndDuration finds them immediately.
+async function moveTrackToFolder(key, folderPath) {
+  const track = trackByKey(key)
+  if (!track) return
+  const sure = confirm(
+    `Move "${track.filename}" into the "${folderPath}" folder on the drive?\n\n` +
+    'This physically relocates the file - that\'s what makes it join that playlist.'
+  )
+  if (!sure) return
+
+  try {
+    const result = await jukebox.moveFileToFolder(track.path, folderPath)
+    const newOnes = reconcileLibrary(result.files)
+    playlists = result.playlists
+    queue = result.queue
+    metadataCache = await jukebox.getMetadataCache()
+    document.getElementById('library-status').textContent = `Moved "${track.filename}" into "${folderPath}".`
+    renderLibrary()
+    renderPlaylists()
+    renderQueue()
+    for (const t of newOnes) await generateThumbAndDuration(t)
+    if (newOnes.length) renderLibrary()
+  } catch (err) {
+    document.getElementById('library-status').textContent = `Could not move "${track.filename}": ${err.message}`
   }
 }
 
