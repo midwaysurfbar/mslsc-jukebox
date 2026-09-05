@@ -227,7 +227,10 @@ function renderTrackTile(track) {
           ? `<button class="primary" data-convert="${track.key}" ${track.converting ? 'disabled' : ''}>${track.converting ? 'Converting…' : 'Convert'}</button>`
           : `<button class="secondary" data-play-now="${track.key}">▶ Play</button><button class="secondary" data-add-queue="${track.key}">+ Queue</button>`}
       </div>
-      <div class="track-actions">${playlistPickerHtml(track)}</div>
+      <div class="track-actions">
+        ${playlistPickerHtml(track)}
+        <button class="danger" data-delete-file="${track.key}" title="Permanently delete this file from the drive">🗑 Delete</button>
+      </div>
     </div>`
 }
 
@@ -257,6 +260,38 @@ function renderLibrary() {
     e.target.value = ''
   }))
   grid.querySelectorAll('[data-convert]').forEach((el) => el.addEventListener('click', () => convertTrack(el.dataset.convert)))
+  grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => deleteFile(el.dataset.deleteFile)))
+}
+
+// Permanently removes one file from the actual media drive - not just
+// this library list. Confirms first since, unlike Reset Library, this
+// really can't be undone (no re-scan brings it back), then cleans the
+// track out of local state using exactly what main returned, so playlists
+// and the queue can never drift from what's now on disk.
+async function deleteFile(key) {
+  const track = trackByKey(key)
+  if (!track) return
+  const sure = confirm(
+    `Permanently delete "${track.filename}" from the drive?\n\n` +
+    'This deletes the actual video file, not just this library entry, and cannot be undone. ' +
+    'It will also be removed from any playlists and the queue.'
+  )
+  if (!sure) return
+
+  try {
+    const result = await jukebox.deleteFile(key, track.path)
+    playlists = result.playlists
+    queue = result.queue
+    library = library.filter((t) => t.key !== key)
+    delete metadataCache[key]
+    document.getElementById('library-status').textContent = `Deleted "${track.filename}" from the drive.`
+    renderLibrary()
+    renderPlaylists()
+    renderQueue()
+    jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+  } catch (err) {
+    document.getElementById('library-status').textContent = `Could not delete "${track.filename}": ${err.message}`
+  }
 }
 
 // Re-encodes one track to plain H.264/AAC MP4 via the bundled ffmpeg,

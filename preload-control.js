@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld('jukebox', {
   // the actual video files. Returns the reset settings.
   resetLibrary: () => ipcRenderer.invoke('library:reset-all'),
 
+  // Permanently deletes one real file from the media drive - the one
+  // library action that DOES touch a source file. Returns the cleaned-up
+  // playlists/queue with every reference to it already removed.
+  deleteFile: (key, filePath) => ipcRenderer.invoke('library:delete-file', key, filePath),
+
   // Thumbnails (generated in this renderer via <video>+<canvas>, saved via main)
   saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
   getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),

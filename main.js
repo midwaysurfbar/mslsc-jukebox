@@ -310,6 +310,51 @@ ipcMain.handle('library:reset-all', () => {
   return settings
 })
 
+// Permanently deletes one real video file from the media drive - the one
+// place in the app that ever does that (library:reset-all above only ever
+// touches this app's own cache/settings, never a source file). Kept
+// deliberately narrow: refuses anything outside the currently configured
+// media folder, so it can never be pointed at an arbitrary path, and
+// always cleans up every trace of the file - its cached thumbnail/
+// converted copy, its metadata guess, and any playlist/queue entry -
+// so nothing is left dangling on a key that no longer resolves to a file.
+ipcMain.handle('library:delete-file', (_event, key, filePath) => {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
+  const resolved = path.resolve(filePath)
+  if (!mediaFolder || (resolved !== mediaFolder && !resolved.startsWith(mediaFolder + path.sep))) {
+    throw new Error('Refusing to delete a file outside the configured media folder.')
+  }
+
+  fs.rmSync(resolved, { force: true })
+
+  for (const dir of [THUMBNAILS_DIR, CONVERTED_DIR]) {
+    try {
+      for (const name of fs.readdirSync(dir)) {
+        if (name.startsWith(key)) fs.rmSync(path.join(dir, name), { force: true })
+      }
+    } catch { /* cache dir may not exist yet */ }
+  }
+
+  const metadata = readJson(METADATA_PATH, {})
+  delete metadata[key]
+  writeJson(METADATA_PATH, metadata)
+
+  const playlists = readJson(PLAYLISTS_PATH, []).map((p) => ({
+    ...p,
+    trackKeys: p.trackKeys.filter((k) => k !== key),
+  }))
+  writeJson(PLAYLISTS_PATH, playlists)
+
+  const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
+  const removedBeforeCurrent = queue.tracks.slice(0, queue.currentIndex).filter((k) => k === key).length
+  queue.tracks = queue.tracks.filter((k) => k !== key)
+  queue.currentIndex = Math.max(0, queue.currentIndex - removedBeforeCurrent)
+  writeJson(QUEUE_PATH, queue)
+
+  return { playlists, queue }
+})
+
 // --- IPC: thumbnails (generated client-side in Control via <video>+<canvas>, saved here) ---
 
 ipcMain.handle('thumbnails:save', (_event, key, dataUrl) => {
