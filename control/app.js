@@ -7,6 +7,24 @@ let settings = { mediaFolder: '', crossfadeSeconds: 3, volume: 1, adsEnabled: fa
 let searchQuery = ''
 let groupBy = ''
 
+// Serializes every flow that reconciles a fresh main-process file listing
+// into `library` (manual/auto rescan, delete, move-to-folder, decade-sort)
+// so exactly one ever runs at a time. All of them freely read, reconcile,
+// and reassign the same `library`/`playlists` state - and an explicit
+// action (which itself touches the media folder) can trigger the live
+// folder watch's own auto-rescan while it's still mid-flight. Letting two
+// of these interleave is exactly how a just-moved/converted track can
+// permanently lose its needsConversion/duration: whichever reconcile
+// runs second sees a bare placeholder the other inserted moments earlier
+// and mistakes it for "already known", skipping its thumbnail pass for
+// good. Real, observed bug - not a theoretical one.
+let libraryOpQueue = Promise.resolve()
+function runLibraryOp(fn) {
+  const run = libraryOpQueue.then(fn, fn)
+  libraryOpQueue = run.catch(() => {})
+  return run
+}
+
 // Real filenames (and this app's own userData folder - "MSLSC Jukebox")
 // are full of spaces and other characters that are invalid in a bare
 // file:// URL - each path segment needs percent-encoding, not the path
@@ -104,7 +122,7 @@ async function loadSettings() {
 
 document.getElementById('choose-folder-btn').addEventListener('click', async () => {
   const folder = await jukebox.chooseMediaFolder()
-  if (folder) { await loadSettings(); await rescanLibrary() }
+  if (folder) { await loadSettings(); await runLibraryOp(rescanLibrary) }
 })
 
 document.getElementById('ads-enabled-toggle').addEventListener('change', async (e) => {
@@ -236,13 +254,16 @@ async function rescanLibrary() {
   }
 }
 
-document.getElementById('rescan-btn').addEventListener('click', rescanLibrary)
+document.getElementById('rescan-btn').addEventListener('click', () => runLibraryOp(rescanLibrary))
 
 // The live folder watch (main.js) tells us whenever something changes
 // under the media folder - a new folder, added/removed/moved files, all
 // of it - so a rescan can happen on its own, without anyone needing to
-// click Rescan Folder or restart the app.
-jukebox.onMediaFolderChanged(rescanLibrary)
+// click Rescan Folder or restart the app. Goes through the same
+// runLibraryOp queue as every other library-mutating flow, since this
+// can otherwise fire while an explicit action (which also touches the
+// media folder) is still mid-flight.
+jukebox.onMediaFolderChanged(() => runLibraryOp(rescanLibrary))
 
 // Reconciles a fresh main-process file listing (from a move/sort action,
 // not a full Rescan) with the client's existing `library` array, which
@@ -276,7 +297,7 @@ document.getElementById('enrich-btn').addEventListener('click', async () => {
 // never touched. Enriches first (in this renderer, same as Enrich Library)
 // so the move step in main has real metadata to decide from, rather than
 // treating an un-enriched track as "no confident match, leave it".
-document.getElementById('sort-decade-btn').addEventListener('click', async () => {
+document.getElementById('sort-decade-btn').addEventListener('click', () => runLibraryOp(async () => {
   const status = document.getElementById('library-status')
   const unsorted = library.filter((t) => !t.folder)
   if (!unsorted.length) { status.textContent = 'Nothing to sort - every file is already in a folder.'; return }
@@ -311,7 +332,7 @@ document.getElementById('sort-decade-btn').addEventListener('click', async () =>
   // everything else already has one and reconcileLibrary preserved it.
   for (const track of newOnes) await generateThumbAndDuration(track)
   if (newOnes.length) renderLibrary()
-})
+}))
 
 document.getElementById('library-search').addEventListener('input', (e) => { searchQuery = e.target.value.toLowerCase(); renderLibrary() })
 document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; renderLibrary() })
@@ -355,6 +376,8 @@ function renderTrackTile(track) {
       </div>
       <div class="track-actions">
         ${playlistPickerHtml(track)}
+      </div>
+      <div class="track-actions">
         <button class="danger" data-delete-file="${track.key}" title="Permanently delete this file from the drive">🗑 Delete</button>
       </div>
     </div>`
@@ -387,14 +410,14 @@ function renderLibrary() {
     e.target.value = ''
     if (!value) return
     if (value.startsWith('playlist:')) addTrackToPlaylist(value.slice('playlist:'.length), trackKey)
-    else if (value.startsWith('folder:')) moveTrackToFolder(trackKey, value.slice('folder:'.length))
+    else if (value.startsWith('folder:')) runLibraryOp(() => moveTrackToFolder(trackKey, value.slice('folder:'.length)))
     else if (value === 'new-folder') {
       const name = await askForFolderName()
-      if (name) moveTrackToFolder(trackKey, name)
+      if (name) runLibraryOp(() => moveTrackToFolder(trackKey, name))
     }
   }))
   grid.querySelectorAll('[data-convert]').forEach((el) => el.addEventListener('click', () => convertTrack(el.dataset.convert)))
-  grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => deleteFile(el.dataset.deleteFile)))
+  grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => runLibraryOp(() => deleteFile(el.dataset.deleteFile))))
 }
 
 // Permanently removes one file from the actual media drive - not just
@@ -799,7 +822,7 @@ async function init() {
   queue = await jukebox.getQueue()
   renderPlaylists()
   renderQueue()
-  if (settings.mediaFolder) await rescanLibrary()
+  if (settings.mediaFolder) await runLibraryOp(rescanLibrary)
   document.getElementById('app-version').textContent = await jukebox.getAppVersion()
 }
 init()

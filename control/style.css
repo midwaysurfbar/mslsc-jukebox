@@ -30,6 +30,11 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .track-meta{color:#687b82;font-size:.75rem}
 .track-actions{display:flex;gap:6px;padding:0 10px 10px}
 .track-actions button{flex:1;padding:6px;font-size:.78rem}
+/* The playlist picker moved onto its own row (see renderTrackTile) so a
+   long folder-playlist name can't squeeze the Delete button below a
+   legible width on the row it used to share with it - min-width:0 lets
+   this flex item actually shrink to the tile instead of overflowing it. */
+.track-actions select{flex:1;min-width:0;padding:6px;font-size:.78rem}
 .playlists-list,.queue-list{display:grid;gap:12px;list-style:none;padding:0;margin:0}
 .playlist-card,.queue-row{background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:14px}
 .playlist-header{display:flex;justify-content:space-between;align-items:center}
@@ -45,10 +50,17 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .playlist-track-row,.queue-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .queue-row.now-playing{border-color:#2b7182;background:#eef8f9}
 .queue-index{color:#687b82;font-weight:800;width:24px}
-.settings-form{display:grid;gap:20px;max-width:480px}
-.settings-form label{display:grid;gap:8px;font-weight:700}
-.settings-form input[readonly]{flex:1;background:#f4f7f6}
-.ads-form{margin-top:14px;padding-top:20px;border-top:1px solid #e2e8ea}
+/* Cards fill whatever width the window actually has, wrapping to more
+   columns on a wider window rather than one narrow column capped well
+   short of the screen regardless of how much room there is. Update sits
+   first in the markup (top-left, reading order) since it's the one
+   thing worth checking on sight, not hunting for at the bottom. */
+.settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;align-items:start}
+.settings-card{background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:20px;display:grid;gap:16px;align-content:start}
+.settings-card h2{margin:0;font-size:1.05rem;color:#173F4F}
+.settings-card label{display:grid;gap:8px;font-weight:700}
+.settings-card input[readonly]{flex:1;background:#f4f7f6}
+.settings-card.danger-zone{border-color:#e6b8b8}
 .toggle-row{display:flex!important;flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
 .toggle-switch{display:inline-block;position:relative;width:46px;height:26px;flex:0 0 auto}
 .toggle-switch input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer;z-index:1}
@@ -57,7 +69,6 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .toggle-switch input:checked+.toggle-track{background:#2b7182}
 .toggle-switch input:checked+.toggle-track .toggle-thumb{transform:translateX(20px)}
 .toggle-switch input:focus-visible+.toggle-track{outline:2px solid #2b7182;outline-offset:2px}
-.danger-zone{margin-top:14px;padding-top:20px;border-top:1px solid #e2e8ea}
 /* display:none is the default, flex only when actually shown - an
    unconditional display:flex here would override the browser's own
    [hidden]{display:none} handling of the modal's `hidden` attribute
