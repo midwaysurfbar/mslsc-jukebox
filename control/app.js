@@ -167,9 +167,13 @@ async function generateThumbAndDuration(track) {
 
 async function rescanLibrary() {
   document.getElementById('library-status').textContent = 'Scanning…'
-  const { files, prunedCount } = await jukebox.listVideos()
+  const { files, prunedCount, playlists: syncedPlaylists } = await jukebox.listVideos()
   metadataCache = await jukebox.getMetadataCache()
   library = files
+  // Folder-based playlists (see syncFolderPlaylists in main.js) are
+  // recalculated on every scan - a file already sitting in a subfolder
+  // gets swept into that playlist right here, not just newly-added ones.
+  playlists = syncedPlaylists
   // Thumbnails/duration are generated a few at a time, not all at once,
   // so a big library doesn't freeze the UI - re-render as each batch lands.
   // A rescan also clears out any cached thumbnail/converted-video file
@@ -183,6 +187,7 @@ async function rescanLibrary() {
       ? `Cleaned up ${prunedCount} stale cache file${prunedCount === 1 ? '' : 's'} from earlier scans.`
       : ''
   renderLibrary()
+  renderPlaylists()
   const BATCH = 4
   for (let i = 0; i < library.length; i += BATCH) {
     await Promise.all(library.slice(i, i + BATCH).map(generateThumbAndDuration))
@@ -207,7 +212,11 @@ document.getElementById('library-search').addEventListener('input', (e) => { sea
 document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; renderLibrary() })
 
 function playlistPickerHtml(track) {
-  const options = playlists.map((p) => `<option value="${p.id}">${p.name}</option>`).join('')
+  // Folder-synced playlists are excluded here on purpose - their
+  // membership is recalculated from disk on every rescan, so a manual
+  // add would just be silently undone the next time the library scans.
+  // Move the actual file into that folder instead.
+  const options = playlists.filter((p) => !p.autoFolder).map((p) => `<option value="${p.id}">${p.name}</option>`).join('')
   return `<select data-add-to-playlist="${track.key}"><option value="">+ Playlist</option>${options}</select>`
 }
 
@@ -486,18 +495,22 @@ function renderPlaylists() {
   container.innerHTML = playlists.map((p) => `
     <div class="playlist-card">
       <div class="playlist-header">
-        <strong>${p.name}</strong>
+        <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁 synced from folder</span>' : ''}</strong>
         <div class="button-row">
           <button class="primary" data-playlist-play="${p.id}">▶ Play Now</button>
           <button class="secondary" data-playlist-append="${p.id}">+ Add to Queue</button>
-          <button class="danger" data-playlist-delete="${p.id}">Delete</button>
+          ${p.autoFolder ? '' : `<button class="danger" data-playlist-delete="${p.id}">Delete</button>`}
         </div>
       </div>
       <div class="playlist-tracks">
         ${p.trackKeys.map((key) => {
           const t = trackByKey(key)
-          return t ? `<div class="playlist-track-row"><span>${t.filename}</span><button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button></div>` : ''
-        }).join('') || '<p class="eyebrow">No tracks yet - add some from the Library.</p>'}
+          if (!t) return ''
+          // Membership on a folder-synced playlist is recalculated from
+          // disk on every rescan - no manual remove button, since moving
+          // the file out of the folder is the actual "remove" action.
+          return `<div class="playlist-track-row"><span>${t.filename}</span>${p.autoFolder ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
+        }).join('') || `<p class="eyebrow">${p.autoFolder ? 'No files currently in this folder.' : 'No tracks yet - add some from the Library.'}</p>`}
       </div>
     </div>`).join('') || '<p class="eyebrow">No playlists yet.</p>'
 

@@ -77,7 +77,14 @@ function fileKey(filePath, size) {
 
 // --- Media folder scanning ---
 
-function walkVideoFiles(dir, results = []) {
+// `root` is threaded through the recursion (unchanged on every call)
+// purely so each file can record which subfolder it's actually in,
+// relative to the media folder - e.g. a file in `<root>/80's/x.mp4` gets
+// folder: "80's", one in `<root>/80's/Rock/y.mp4` gets folder: "80's/Rock",
+// and one directly in the root gets folder: "". That's what lets
+// syncFolderPlaylists (below) turn "make a folder" into "get a playlist"
+// with no extra step.
+function walkVideoFiles(dir, root, results = []) {
   let entries
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true })
@@ -98,13 +105,54 @@ function walkVideoFiles(dir, results = []) {
     if (entry.name.startsWith('.')) continue
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) {
-      walkVideoFiles(full, results)
+      walkVideoFiles(full, root, results)
     } else if (VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       const stat = fs.statSync(full)
-      results.push({ path: full, filename: entry.name, size: stat.size, mtimeMs: stat.mtimeMs, key: fileKey(full, stat.size) })
+      const folder = path.relative(root, dir).split(path.sep).join('/')
+      results.push({ path: full, filename: entry.name, size: stat.size, mtimeMs: stat.mtimeMs, key: fileKey(full, stat.size), folder })
     }
   }
   return results
+}
+
+// Auto-creates/syncs one playlist per subfolder actually found under the
+// media folder (e.g. "80's", or "80's/Rock" for a nested one) - dragging
+// videos into a folder is then the whole "add to playlist" step, no
+// manual per-track picking needed. Marked `autoFolder: true` with the
+// `folderPath` it came from so it's never confused with, or clobbered by
+// editing, a manually-built playlist of the same name - Control uses that
+// flag to hide manual add/remove controls on these, since membership here
+// is always exactly "what's in the folder right now" as of the last scan,
+// not something worth hand-editing only to have the next rescan undo it.
+// Files sitting directly in the media folder's root (folder: "") don't
+// get a playlist - there's no folder name to draw one from.
+function syncFolderPlaylists(files) {
+  const byFolder = new Map()
+  for (const file of files) {
+    if (!file.folder) continue
+    if (!byFolder.has(file.folder)) byFolder.set(file.folder, [])
+    byFolder.get(file.folder).push(file.key)
+  }
+
+  let playlists = readJson(PLAYLISTS_PATH, [])
+  // A folder that's been deleted, emptied, or renamed no longer has a
+  // matching entry in byFolder - drop the stale auto-playlist along with
+  // it. A manually-built playlist (autoFolder unset) is never touched here.
+  playlists = playlists.filter((p) => !p.autoFolder || byFolder.has(p.folderPath))
+
+  for (const [folderPath, trackKeys] of byFolder) {
+    const name = folderPath.split('/').join(' / ')
+    const existing = playlists.find((p) => p.autoFolder && p.folderPath === folderPath)
+    if (existing) {
+      existing.trackKeys = trackKeys
+      existing.name = name // picks up a folder rename automatically too
+    } else {
+      playlists.push({ id: crypto.randomUUID(), name, autoFolder: true, folderPath, trackKeys })
+    }
+  }
+
+  writeJson(PLAYLISTS_PATH, playlists)
+  return playlists
 }
 
 // Same idea as walkVideoFiles, for the ad slideshow's image folder - no
@@ -247,10 +295,15 @@ ipcMain.handle('media-folder:choose', async () => {
 
 ipcMain.handle('media-folder:list', () => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
-  if (!settings.mediaFolder) return { files: [], prunedCount: 0 }
-  const files = walkVideoFiles(settings.mediaFolder)
+  if (!settings.mediaFolder) return { files: [], prunedCount: 0, playlists: readJson(PLAYLISTS_PATH, []) }
+  const files = walkVideoFiles(settings.mediaFolder, settings.mediaFolder)
+  // Both of these are guarded on a non-empty scan for the same reason -
+  // a media folder that's temporarily unreachable (drive unplugged,
+  // network share down) must never be read as "everything's gone" and
+  // wipe every folder-playlist along with the cache.
   const prunedCount = files.length > 0 ? pruneOrphanedCacheFiles(new Set(files.map((r) => r.key))) : 0
-  return { files, prunedCount }
+  const playlists = files.length > 0 ? syncFolderPlaylists(files) : readJson(PLAYLISTS_PATH, [])
+  return { files, prunedCount, playlists }
 })
 
 ipcMain.handle('ads-folder:choose', async () => {
