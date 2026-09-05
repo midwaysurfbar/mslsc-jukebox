@@ -303,11 +303,15 @@ function stopWatchingMediaFolder() {
 // Debounced - a real copy operation (or this app's own Sort/Move actions)
 // fires many filesystem events in quick succession, and there's no
 // reason to tell Control to rescan more than once per burst of activity.
+// Short enough that the native watcher (Windows/macOS) still feels
+// near-instant - this delay, not the watcher itself, is the only real
+// lag between "file lands on disk" and "library updates" on those
+// platforms, so it's the one knob worth keeping small.
 function notifyMediaFolderChanged() {
   if (mediaRescanDebounce) clearTimeout(mediaRescanDebounce)
   mediaRescanDebounce = setTimeout(() => {
     if (controlWindow) controlWindow.webContents.send('media-folder:changed')
-  }, 1200)
+  }, 400)
 }
 
 function startWatchingMediaFolder(mediaFolder) {
@@ -324,10 +328,11 @@ function startWatchingMediaFolder(mediaFolder) {
     mediaWatcher.on('error', () => {})
   } catch {
     // recursive watching isn't supported on this platform (Linux) -
-    // fall back to a plain poll. 8s keeps this cheap (just a debounced
-    // IPC message, not a scan itself - Control decides what to do with it).
+    // fall back to a plain poll. This only ever runs on the Linux
+    // build - the real target (the venue PC) is Windows, which always
+    // takes the instant native-watch path above.
     mediaWatcher = null
-    mediaPollTimer = setInterval(() => notifyMediaFolderChanged(), 8000)
+    mediaPollTimer = setInterval(() => notifyMediaFolderChanged(), 3000)
   }
 }
 
@@ -754,6 +759,38 @@ function refreshTrayMenu() {
   tray.setToolTip(updateReady ? 'MSLSC Jukebox - update ready, restart to apply' : 'MSLSC Jukebox')
 }
 
+// Lets Settings show live status text for "Check for Updates" - checking,
+// found/not found, downloading, ready, or an error - rather than the
+// button just silently doing something in the background.
+function sendUpdateStatus(status) {
+  if (controlWindow) controlWindow.webContents.send('update:status', status)
+}
+
+// Shown the moment a new version has actually finished downloading and
+// is ready to install - a native OS dialog (not a page-level one), since
+// this is a whole-app decision that can happen at any time, not just
+// while looking at a particular screen. "Update Now" restarts right
+// away (quitAndInstall); "Later" just dismisses - either way the update
+// still installs automatically the next time the app quits regardless
+// (autoInstallOnAppQuit), same as the tray's existing "Restart to
+// Update" item, which stays available either way.
+let updatePromptShowing = false
+async function promptToInstallUpdate(version) {
+  if (updatePromptShowing) return // a recheck landing mid-prompt shouldn't stack a second one
+  updatePromptShowing = true
+  const result = await dialog.showMessageBox(controlWindow, {
+    type: 'info',
+    title: 'Update available',
+    message: `MSLSC Jukebox ${version} is ready to install.`,
+    detail: 'Update now (the app restarts - only takes a moment), or later, when it\'ll install automatically the next time the app closes.',
+    buttons: ['Update Now', 'Later'],
+    defaultId: 0,
+    cancelId: 1,
+  })
+  updatePromptShowing = false
+  if (result.response === 0) autoUpdater.quitAndInstall()
+}
+
 function setupAutoUpdate() {
   if (!app.isPackaged) return
 
@@ -761,17 +798,31 @@ function setupAutoUpdate() {
   autoUpdater.autoInstallOnAppQuit = true
   if (process.env.JUKEBOX_DEBUG) autoUpdater.logger = console
 
-  autoUpdater.on('update-downloaded', () => {
+  autoUpdater.on('checking-for-update', () => sendUpdateStatus({ state: 'checking' }))
+  autoUpdater.on('update-available', (info) => sendUpdateStatus({ state: 'available', version: info.version }))
+  autoUpdater.on('update-not-available', () => sendUpdateStatus({ state: 'not-available', version: app.getVersion() }))
+  autoUpdater.on('update-downloaded', (info) => {
     updateReady = true
     refreshTrayMenu()
+    sendUpdateStatus({ state: 'downloaded', version: info.version })
+    promptToInstallUpdate(info.version)
   })
   autoUpdater.on('error', (err) => {
     if (process.env.JUKEBOX_DEBUG) console.log('AUTO-UPDATE ERROR', err)
+    sendUpdateStatus({ state: 'error', message: err.message })
   })
 
   autoUpdater.checkForUpdates()
   setInterval(() => autoUpdater.checkForUpdates(), 4 * 60 * 60 * 1000)
 }
+
+ipcMain.handle('update:check', () => {
+  if (!app.isPackaged) return { state: 'dev-mode' }
+  autoUpdater.checkForUpdates()
+  return { state: 'checking' }
+})
+
+ipcMain.handle('app:get-version', () => app.getVersion())
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)

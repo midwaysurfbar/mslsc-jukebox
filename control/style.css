@@ -35,6 +35,13 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .playlist-header{display:flex;justify-content:space-between;align-items:center}
 .auto-tag{font-weight:400;font-size:.72rem;color:#5d7078;margin-left:6px}
 .playlist-tracks{margin-top:10px;display:grid;gap:6px}
+.playlist-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+.playlist-tile{background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:8px}
+.playlist-tile:hover{border-color:#2b7182}
+.playlist-tile .track-actions{padding:0}
+.playlist-tile strong{font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playlist-detail{display:grid;gap:14px;align-content:start}
+.playlist-detail>#playlist-back-btn{justify-self:start}
 .playlist-track-row,.queue-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .queue-row.now-playing{border-color:#2b7182;background:#eef8f9}
 .queue-index{color:#687b82;font-weight:800;width:24px}

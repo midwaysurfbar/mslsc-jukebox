@@ -72,4 +72,9 @@ contextBridge.exposeInMainWorld('jukebox', {
   // files, all of it - so Control can silently re-run the same scan
   // Rescan Folder triggers manually, without anyone having to click it.
   onMediaFolderChanged: (callback) => ipcRenderer.on('media-folder:changed', () => callback()),
+
+  // Auto-update (Settings tab's "Check for Updates" button + status line).
+  getAppVersion: () => ipcRenderer.invoke('app:get-version'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  onUpdateStatus: (callback) => ipcRenderer.on('update:status', (_event, status) => callback(status)),
 })

@@ -644,34 +644,20 @@ async function appendPlaylistToQueue(playlistId) {
 }
 async function deletePlaylist(id) {
   playlists = await jukebox.deletePlaylist(id)
+  if (openPlaylistId === id) openPlaylistId = null
   renderPlaylists()
   renderLibrary()
 }
 
-function renderPlaylists() {
-  const container = document.getElementById('playlists-list')
-  container.innerHTML = playlists.map((p) => `
-    <div class="playlist-card">
-      <div class="playlist-header">
-        <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁 synced from folder</span>' : ''}</strong>
-        <div class="button-row">
-          <button class="primary" data-playlist-play="${p.id}">▶ Play Now</button>
-          <button class="secondary" data-playlist-append="${p.id}">+ Add to Queue</button>
-          ${p.autoFolder ? '' : `<button class="danger" data-playlist-delete="${p.id}">Delete</button>`}
-        </div>
-      </div>
-      <div class="playlist-tracks">
-        ${p.trackKeys.map((key) => {
-          const t = trackByKey(key)
-          if (!t) return ''
-          // Membership on a folder-synced playlist is recalculated from
-          // disk on every rescan - no manual remove button, since moving
-          // the file out of the folder is the actual "remove" action.
-          return `<div class="playlist-track-row"><span>${t.filename}</span>${p.autoFolder ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
-        }).join('') || `<p class="eyebrow">${p.autoFolder ? 'No files currently in this folder.' : 'No tracks yet - add some from the Library.'}</p>`}
-      </div>
-    </div>`).join('') || '<p class="eyebrow">No playlists yet.</p>'
+// null = showing the tile grid; a playlist id = that one playlist's
+// track list is open. Two-level nav rather than every card permanently
+// showing its full track list, which stopped scaling once folder-synced
+// playlists (auto-created per subfolder) meant there could be a lot more
+// of these than the handful of manually-built ones this screen was
+// originally designed around.
+let openPlaylistId = null
 
+function wirePlaylistActionButtons(container) {
   container.querySelectorAll('[data-playlist-play]').forEach((el) => el.addEventListener('click', () => playPlaylistNow(el.dataset.playlistPlay)))
   container.querySelectorAll('[data-playlist-append]').forEach((el) => el.addEventListener('click', () => appendPlaylistToQueue(el.dataset.playlistAppend)))
   container.querySelectorAll('[data-playlist-delete]').forEach((el) => el.addEventListener('click', () => deletePlaylist(el.dataset.playlistDelete)))
@@ -679,6 +665,64 @@ function renderPlaylists() {
     const [playlistId, trackKey] = el.dataset.playlistRemoveTrack.split('::')
     removeTrackFromPlaylist(playlistId, trackKey)
   }))
+}
+
+function renderPlaylists() {
+  const container = document.getElementById('playlists-list')
+  const openPlaylist = openPlaylistId && playlists.find((p) => p.id === openPlaylistId)
+
+  if (openPlaylist) {
+    const p = openPlaylist
+    container.className = 'playlist-detail'
+    container.innerHTML = `
+      <button class="secondary" id="playlist-back-btn">← Back to Playlists</button>
+      <div class="playlist-card">
+        <div class="playlist-header">
+          <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁 synced from folder</span>' : ''}</strong>
+          <div class="button-row">
+            <button class="primary" data-playlist-play="${p.id}">▶ Play Now</button>
+            <button class="secondary" data-playlist-append="${p.id}">+ Add to Queue</button>
+            ${p.autoFolder ? '' : `<button class="danger" data-playlist-delete="${p.id}">Delete</button>`}
+          </div>
+        </div>
+        <div class="playlist-tracks">
+          ${p.trackKeys.map((key) => {
+            const t = trackByKey(key)
+            if (!t) return ''
+            // Membership on a folder-synced playlist is recalculated from
+            // disk on every rescan - no manual remove button, since moving
+            // the file out of the folder is the actual "remove" action.
+            return `<div class="playlist-track-row"><span>${t.filename}</span>${p.autoFolder ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
+          }).join('') || `<p class="eyebrow">${p.autoFolder ? 'No files currently in this folder.' : 'No tracks yet - add some from the Library.'}</p>`}
+        </div>
+      </div>`
+    document.getElementById('playlist-back-btn').addEventListener('click', () => { openPlaylistId = null; renderPlaylists() })
+    wirePlaylistActionButtons(container)
+    return
+  }
+
+  container.className = 'playlist-tiles'
+  container.innerHTML = playlists.map((p) => `
+    <div class="playlist-tile" data-open-playlist="${p.id}">
+      <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁</span>' : ''}</strong>
+      <div class="track-meta">${p.trackKeys.length} track${p.trackKeys.length === 1 ? '' : 's'}</div>
+      <div class="track-actions">
+        <button class="primary" data-playlist-play="${p.id}">▶ Play</button>
+        <button class="secondary" data-playlist-append="${p.id}">+ Queue</button>
+      </div>
+    </div>`).join('') || '<p class="eyebrow">No playlists yet.</p>'
+
+  // Opening a playlist is a click anywhere on its tile EXCEPT the two
+  // action buttons, which do their own thing (play/queue) without also
+  // opening the tile - checking e.target here rather than stopping
+  // propagation on the buttons themselves, so their own listeners (wired
+  // below, same as everywhere else) don't need to know this exists.
+  container.querySelectorAll('[data-open-playlist]').forEach((el) => el.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return
+    openPlaylistId = el.dataset.openPlaylist
+    renderPlaylists()
+  }))
+  wirePlaylistActionButtons(container)
 }
 
 // --- Now playing bar ---
@@ -727,6 +771,26 @@ jukebox.onPlayerState((state) => {
   renderQueue()
 })
 
+// --- Software update (Settings tab) ---
+
+document.getElementById('check-update-btn').addEventListener('click', async () => {
+  const status = document.getElementById('update-status')
+  const result = await jukebox.checkForUpdates()
+  // Anything else (checking/available/not-available/downloaded/error) is
+  // reported by the onUpdateStatus listener below as electron-updater's
+  // real events come in - this button just kicks a check off.
+  if (result.state === 'dev-mode') status.textContent = 'Auto-update only runs in the installed app, not this dev copy.'
+})
+
+jukebox.onUpdateStatus((status) => {
+  const el = document.getElementById('update-status')
+  if (status.state === 'checking') el.textContent = 'Checking for updates…'
+  else if (status.state === 'available') el.textContent = `Update ${status.version} found - downloading…`
+  else if (status.state === 'not-available') el.textContent = `You're on the latest version (${status.version}).`
+  else if (status.state === 'downloaded') el.textContent = `Update ${status.version} downloaded - a popup will offer to install it.`
+  else if (status.state === 'error') el.textContent = `Could not check for updates: ${status.message}`
+})
+
 // --- Init ---
 
 async function init() {
@@ -736,5 +800,6 @@ async function init() {
   renderPlaylists()
   renderQueue()
   if (settings.mediaFolder) await rescanLibrary()
+  document.getElementById('app-version').textContent = await jukebox.getAppVersion()
 }
 init()
