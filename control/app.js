@@ -178,15 +178,49 @@ async function generateThumbAndDuration(track) {
 
   const existingThumb = await jukebox.getThumbnailPath(track.key)
   return new Promise((resolve) => {
+    let settled = false
+    let metadataLoaded = false
     const video = document.createElement('video')
+
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      video.remove()
+      resolve()
+    }
+
+    // Some files never cleanly fire EITHER loadedmetadata or error - a
+    // truncated/corrupt file, an exotic codec Chromium can partially
+    // probe but not finish, or (this app's real deployment: a network
+    // share) a slow/flaky read that just never completes. Without a hard
+    // timeout, one such file hangs its entire batch of 4 forever (the
+    // BATCH loop in rescanLibrary uses Promise.all), silently starving
+    // every track queued behind it - which is exactly the reported bug:
+    // "Convert Unsupported" only ever sees library.filter(needsConversion),
+    // and a track stuck behind a hung one never gets that flag set at
+    // all, so it's not skipped so much as never even checked. If metadata
+    // already loaded successfully and only the thumbnail-capture step is
+    // stuck, this only gives up on the thumbnail - it doesn't wrongly
+    // re-flag a perfectly playable file as needing conversion.
+    const timeoutId = setTimeout(() => {
+      if (!metadataLoaded) {
+        track.duration = 0
+        track.error = true
+        track.needsConversion = !track.convertedPath
+      }
+      finish()
+    }, 20000)
+
     video.preload = 'metadata'
     video.muted = true
     video.src = toFileUrl(playablePath(track))
     video.addEventListener('loadedmetadata', () => {
+      metadataLoaded = true
       track.duration = video.duration
       track.error = false
       track.needsConversion = false
-      if (existingThumb) { track.thumbPath = existingThumb; video.remove(); resolve(); return }
+      if (existingThumb) { track.thumbPath = existingThumb; finish(); return }
       video.currentTime = Math.min(3, video.duration / 2 || 0)
     })
     video.addEventListener('seeked', async () => {
@@ -200,8 +234,7 @@ async function generateThumbAndDuration(track) {
         // on the track object before resolve() fires, not sometime after.
         track.thumbPath = await jukebox.saveThumbnail(track.key, dataUrl)
       } catch { /* thumbnail is a nice-to-have, never block on it */ }
-      video.remove()
-      resolve()
+      finish()
     })
     video.addEventListener('error', () => {
       track.duration = 0
@@ -210,8 +243,7 @@ async function generateThumbAndDuration(track) {
       // ALREADY-CONVERTED copy somehow fails too, converting it again
       // won't help, so don't offer to retry forever.
       track.needsConversion = !track.convertedPath
-      video.remove()
-      resolve()
+      finish()
     })
   })
 }
