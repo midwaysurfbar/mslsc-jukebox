@@ -26,7 +26,11 @@ const FFMPEG_PATH = app.isPackaged
 // every state update is relayed through this main process, since that's
 // the only thing both sides can reach.
 
-const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mkv', '.mov', '.m4v'])
+// .avi/.wmv almost always carry a codec Chromium can't decode natively
+// (Xvid/DivX/WMV3/VC-1) - they'll just get flagged "Needs conversion"
+// like any other unsupported file, same as before, but now they at
+// least show up in the library to be converted at all.
+const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mkv', '.mov', '.m4v', '.avi', '.wmv'])
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
 
 const USER_DATA = app.getPath('userData')
