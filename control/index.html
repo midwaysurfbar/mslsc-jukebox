@@ -80,7 +80,7 @@
         </div>
 
         <div class="settings-card">
-          <h2>Ad slideshow</h2>
+          <h2>Ad breaks</h2>
           <label class="toggle-row">
             <span>Play between songs</span>
             <span class="toggle-switch">
@@ -91,10 +91,11 @@
           <label><span>Ad images folder</span>
             <div class="button-row"><input id="ads-folder" readonly /><button class="secondary" id="choose-ads-folder-btn">Choose…</button></div>
           </label>
-          <label><span>Show a slideshow every <b id="ads-every-value">4</b> song<span id="ads-every-plural">s</span></span>
+          <p class="eyebrow" style="margin-top:0">Each break shows one ad, picked at random from everything available - the manually uploaded ones and the auto-generated bar-session ones together.</p>
+          <label><span>Show an ad every <b id="ads-every-value">4</b> song<span id="ads-every-plural">s</span></span>
             <input id="ads-every-slider" type="range" min="1" max="15" step="1" value="4" />
           </label>
-          <label><span>Seconds per image: <b id="ads-seconds-value">6</b>s</span>
+          <label><span>Seconds shown for: <b id="ads-seconds-value">6</b>s</span>
             <input id="ads-seconds-slider" type="range" min="2" max="20" step="1" value="6" />
           </label>
         </div>

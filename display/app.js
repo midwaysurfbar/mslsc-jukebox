@@ -61,12 +61,10 @@ async function refreshAdImages() {
   }
 }
 
-// Shows every image in the folder once, in a shuffled order (so a
-// break doesn't play the exact same sequence every single time), for
-// adsSecondsPerImage each - a skipped/broken image just moves on
-// immediately rather than sitting on a blank frame for the full
-// duration. Runs entirely independently of playback - never awaited by
-// anything that advances the queue.
+// Shows one image for adsSecondsPerImage - a skipped/broken image just
+// moves on immediately rather than sitting on a blank frame for the
+// full duration. Runs entirely independently of playback - never
+// awaited by anything that advances the queue.
 function showAdImage(image) {
   return new Promise((resolve) => {
     let done = false
@@ -90,11 +88,13 @@ async function playAdBreak() {
   // rather than queue up a second slideshow behind it.
   if (!adImages.length || adBreakInProgress) return
   adBreakInProgress = true
-  const shuffled = [...adImages].sort(() => Math.random() - 0.5)
+  // Exactly one image per break (Sam, 2026-09-12: cap the break length
+  // now that manual + auto-generated bar-session ads share the same
+  // pool) - a random pick, not sequential, so which ad shows varies
+  // break to break rather than always favouring whatever sorts first.
+  const image = adImages[Math.floor(Math.random() * adImages.length)]
   adOverlay.classList.add('active')
-  for (const image of shuffled) {
-    await showAdImage(image)
-  }
+  await showAdImage(image)
   adOverlay.classList.remove('active')
   adImageEl.removeAttribute('src')
   adBreakInProgress = false
