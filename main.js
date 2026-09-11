@@ -9,6 +9,20 @@ const { spawn } = require('node:child_process')
 // the venue's Bluetooth sound system), so allow autoplay without a gesture.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
+// Safety net for the venue: an uncaught error anywhere in the main
+// process used to pop Electron's default "A JavaScript error occurred
+// in the main process" dialog - jarring and disruptive live, and it hit
+// for real (2026-09-12: an EBUSY from a temp-file cleanup racing a just-
+// killed ffmpeg process on Windows). Log it and keep the app running
+// instead - Display/Control staying up in a possibly-degraded state
+// beats a crash dialog interrupting whoever's at the bar.
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason)
+})
+
 // ffmpeg-static's own path points inside app.asar once packaged, which
 // isn't directly executable - electron-builder is configured (see
 // package.json's asarUnpack) to unpack this one file out to
@@ -1014,7 +1028,15 @@ ipcMain.handle('convert:run', (_event, key, sourcePath) => {
       if (settled) return
       settled = true
       ffmpeg.kill('SIGKILL')
-      fs.rmSync(tempPath, { force: true })
+      // SIGKILL doesn't release the OS file handle synchronously on
+      // Windows - rmSync running right after can hit EBUSY while the
+      // killed process is still tearing down. This is best-effort
+      // cleanup of a temp file, not core logic, so a failure here must
+      // never crash the app (it did exactly that live at the venue
+      // before this fix - an uncaught EBUSY brought down the whole main
+      // process). Worst case a stray .tmp.mp4 is left in CONVERTED_DIR,
+      // harmless and overwritten by the next attempt at this same file.
+      try { fs.rmSync(tempPath, { force: true }) } catch { /* still locked - ignore, not fatal */ }
       reject(new Error(`Conversion timed out after ${CONVERT_TIMEOUT_MS / 60000} minutes - the source may be corrupted or on a slow/unreachable network location.`))
     }, CONVERT_TIMEOUT_MS)
 
@@ -1034,11 +1056,19 @@ ipcMain.handle('convert:run', (_event, key, sourcePath) => {
       if (code === 0) {
         // Renamed into place only on success - a failed/interrupted
         // conversion never leaves a half-written file at the real path
-        // for a later run to mistake for a finished one.
-        fs.renameSync(tempPath, outputPath)
-        resolve(outputPath)
+        // for a later run to mistake for a finished one. Even a clean
+        // ffmpeg exit doesn't guarantee Windows has released the file
+        // handle instantly (AV scanners commonly grab a newly-written
+        // file for a moment) - reject with a clear message instead of
+        // letting a transient EBUSY here crash the app.
+        try {
+          fs.renameSync(tempPath, outputPath)
+          resolve(outputPath)
+        } catch (err) {
+          reject(new Error(`Conversion finished but the output file could not be saved: ${err.message}`))
+        }
       } else {
-        fs.rmSync(tempPath, { force: true })
+        try { fs.rmSync(tempPath, { force: true }) } catch { /* still locked - ignore, not fatal */ }
         // Last few non-empty lines, not just the very last one - ffmpeg's
         // actual diagnostic ("Unsupported codec", "Invalid data found",
         // etc.) is often a couple of lines before its final output,
