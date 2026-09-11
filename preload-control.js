@@ -77,4 +77,14 @@ contextBridge.exposeInMainWorld('jukebox', {
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   onUpdateStatus: (callback) => ipcRenderer.on('update:status', (_event, status) => callback(status)),
+
+  // Web-uploaded ads (the standalone mslsc-jukebox-ad-upload page) -
+  // Settings' own link/managed-list section.
+  getAdUploadUrl: () => ipcRenderer.invoke('web-ads:get-upload-url'),
+  listRemoteAds: () => ipcRenderer.invoke('web-ads:list-remote'),
+  deleteRemoteAd: (passphrase, path) => ipcRenderer.invoke('web-ads:delete-remote', passphrase, path),
+  // Fires after every periodic background sync (roughly every 2 minutes)
+  // whether or not it actually changed anything, so Settings can show a
+  // live "last checked" status.
+  onWebAdsSynced: (callback) => ipcRenderer.on('web-ads:synced', (_event, result) => callback(result)),
 })

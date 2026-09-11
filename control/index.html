@@ -99,6 +99,17 @@
           </label>
         </div>
 
+        <div class="settings-card">
+          <h2>Web ad uploads</h2>
+          <p class="eyebrow">Anyone with this link can add an ad from anywhere - no app or file access to this PC needed. New uploads sync in here automatically.</p>
+          <div class="button-row"><input id="ad-upload-url" readonly /><button class="secondary" id="copy-ad-upload-url-btn">Copy Link</button></div>
+          <p id="web-ads-sync-status" class="message"></p>
+          <label><span>Passphrase (to delete an ad from here)</span>
+            <div class="button-row"><input type="password" id="ad-upload-passphrase" autocomplete="off" placeholder="Same one shared with uploaders" /><button class="secondary" id="save-ad-upload-passphrase-btn">Save</button></div>
+          </label>
+          <div id="web-ads-list" class="web-ads-list"></div>
+        </div>
+
         <div class="settings-card danger-zone">
           <h2>Start fresh</h2>
           <p class="eyebrow">Clears every playlist, the queue, and cached thumbnails/conversions, and un-sets the media folder — as if the app were freshly installed. Your actual video files are never touched, only re-selected next time.</p>

@@ -36,6 +36,12 @@ const QUEUE_PATH = path.join(USER_DATA, 'queue.json')
 const METADATA_PATH = path.join(USER_DATA, 'metadata.json')
 const THUMBNAILS_DIR = path.join(USER_DATA, 'thumbnails')
 const CONVERTED_DIR = path.join(USER_DATA, 'converted')
+// Local cache of ads synced down from the web uploader (see
+// syncWebAds below) - kept entirely separate from adsFolder (the
+// person's own manually-picked local folder) so both can coexist; the
+// combined ad-slideshow list is just the two folders' contents added
+// together (see ads-folder:list).
+const WEB_ADS_DIR = path.join(USER_DATA, 'web-ads')
 
 const DEFAULT_SETTINGS = {
   mediaFolder: '',
@@ -47,6 +53,77 @@ const DEFAULT_SETTINGS = {
   adsFolder: '',
   adsEverySongs: 4,
   adsSecondsPerImage: 6,
+  // Only needed to delete a web-uploaded ad from this app's own Settings
+  // (rather than from the upload page itself) - typed once, remembered
+  // here same as any other setting. Never sent anywhere except the
+  // jukebox-ads function's own delete action.
+  adUploadPassphrase: '',
+}
+
+// The standalone web page (separate repo: mslsc-jukebox-ad-upload) and
+// the Supabase Edge Function backing it - lets anyone with the shared
+// passphrase add or remove an ad image from anywhere, which this app
+// then syncs down on its own. Same shared Supabase project every other
+// MSLSC app already uses; these are public/anon-level values (an anon
+// key + a well-known function URL), not secrets.
+const JUKEBOX_AD_UPLOAD_PAGE = 'https://midwaysurfjukeboxads.vercel.app'
+const JUKEBOX_ADS_FN_URL = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/jukebox-ads'
+const JUKEBOX_ADS_ANON_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj'
+const WEB_ADS_SYNC_INTERVAL_MS = 2 * 60 * 1000
+
+function callJukeboxAdsFn(body) {
+  return fetch(JUKEBOX_ADS_FN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${JUKEBOX_ADS_ANON_KEY}`,
+      apikey: JUKEBOX_ADS_ANON_KEY,
+    },
+    body: JSON.stringify(body),
+  }).then((r) => r.json())
+}
+
+// Pulls the current web-uploaded ad list and reconciles it against
+// WEB_ADS_DIR - downloads anything new, deletes anything no longer
+// listed remotely (so a delete from the web page takes effect here on
+// the next pass, not just on the page itself). Never touches adsFolder,
+// the person's own separately-managed local folder. Failure here (no
+// internet, function unreachable) is never fatal - whatever's already
+// downloaded keeps working exactly as before, same principle as every
+// other "best-effort background sync" in this app.
+async function syncWebAds() {
+  let files
+  try {
+    const data = await callJukeboxAdsFn({ action: 'list' })
+    if (!data.ok) throw new Error(data.error || 'Could not list web ads.')
+    files = data.files
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+
+  fs.mkdirSync(WEB_ADS_DIR, { recursive: true })
+  const remoteNames = new Set(files.map((f) => f.path))
+  const existingLocal = new Set(fs.readdirSync(WEB_ADS_DIR))
+
+  let downloaded = 0
+  for (const file of files) {
+    if (existingLocal.has(file.path)) continue // already have it - the path is timestamp-prefixed, so it's stable and unique
+    try {
+      const response = await fetch(file.url)
+      if (!response.ok) continue // try again on the next pass
+      fs.writeFileSync(path.join(WEB_ADS_DIR, file.path), Buffer.from(await response.arrayBuffer()))
+      downloaded += 1
+    } catch { /* offline mid-download, or similar - try again next pass */ }
+  }
+
+  let removed = 0
+  for (const localName of existingLocal) {
+    if (!remoteNames.has(localName)) {
+      try { fs.rmSync(path.join(WEB_ADS_DIR, localName), { force: true }); removed += 1 } catch { /* best effort */ }
+    }
+  }
+
+  return { ok: true, downloaded, removed, total: files.length }
 }
 
 function readJson(filePath, fallback) {
@@ -516,8 +593,40 @@ ipcMain.handle('ads-folder:choose', async () => {
 
 ipcMain.handle('ads-folder:list', () => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
-  if (!settings.adsFolder) return { files: [] }
-  return { files: walkImageFiles(settings.adsFolder) }
+  const files = []
+  if (settings.adsFolder) files.push(...walkImageFiles(settings.adsFolder))
+  if (fs.existsSync(WEB_ADS_DIR)) files.push(...walkImageFiles(WEB_ADS_DIR))
+  return { files }
+})
+
+// --- Web-uploaded ads (see syncWebAds above) ---
+
+ipcMain.handle('web-ads:get-upload-url', () => JUKEBOX_AD_UPLOAD_PAGE)
+
+ipcMain.handle('web-ads:sync', () => syncWebAds())
+
+// Separate from the sync above (which just reconciles the local cache) -
+// this is what Settings' own managed list renders, straight from the
+// source of truth rather than whatever this app last happened to
+// download, so a very recent upload/delete from elsewhere shows up here
+// immediately rather than waiting for the next sync pass.
+ipcMain.handle('web-ads:list-remote', () => callJukeboxAdsFn({ action: 'list' }))
+
+ipcMain.handle('web-ads:delete-remote', async (_event, passphrase, remotePath) => {
+  const data = await callJukeboxAdsFn({ action: 'delete', passphrase, path: remotePath })
+  // Removes the local cached copy immediately on success, and tells
+  // Display right away - both rather than waiting for the next scheduled
+  // sync pass to notice it's gone, since the whole point of deleting it
+  // here is for it to stop showing up now, not up to
+  // WEB_ADS_SYNC_INTERVAL_MS later.
+  if (data.ok) {
+    try { fs.rmSync(path.join(WEB_ADS_DIR, remotePath), { force: true }) } catch { /* next sync will catch it either way */ }
+    if (displayWindow) {
+      const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+      displayWindow.webContents.send('settings:updated', settings)
+    }
+  }
+  return data
 })
 
 ipcMain.handle('playlists:get-all', () => readJson(PLAYLISTS_PATH, []))
@@ -824,6 +933,26 @@ ipcMain.handle('update:check', () => {
 
 ipcMain.handle('app:get-version', () => app.getVersion())
 
+// Runs a sync pass immediately, then again every
+// WEB_ADS_SYNC_INTERVAL_MS for as long as the app is open. Display only
+// ever re-reads the ad-image list on its own at startup or when a
+// setting actually changes (see onSettingsUpdated) - reusing that same
+// 'settings:updated' broadcast here (only when something actually
+// changed) is what makes a fresh web upload show up in the slideshow on
+// its own, without anyone touching a setting.
+function startSyncingWebAds() {
+  const runSync = async () => {
+    const result = await syncWebAds()
+    if (controlWindow) controlWindow.webContents.send('web-ads:synced', result)
+    if (result.ok && (result.downloaded > 0 || result.removed > 0) && displayWindow) {
+      const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+      displayWindow.webContents.send('settings:updated', settings)
+    }
+  }
+  runSync()
+  setInterval(runSync, WEB_ADS_SYNC_INTERVAL_MS)
+}
+
 app.whenReady().then(() => {
   Menu.setApplicationMenu(null)
   createControlWindow()
@@ -832,6 +961,7 @@ app.whenReady().then(() => {
   setupAutoUpdate()
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   startWatchingMediaFolder(settings.mediaFolder)
+  startSyncingWebAds()
 })
 
 app.on('before-quit', () => {

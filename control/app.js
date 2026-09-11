@@ -118,6 +118,8 @@ async function loadSettings() {
   document.getElementById('ads-every-plural').textContent = settings.adsEverySongs === 1 ? '' : 's'
   document.getElementById('ads-seconds-slider').value = settings.adsSecondsPerImage
   document.getElementById('ads-seconds-value').textContent = settings.adsSecondsPerImage
+
+  document.getElementById('ad-upload-passphrase').value = settings.adUploadPassphrase || ''
 }
 
 document.getElementById('choose-folder-btn').addEventListener('click', async () => {
@@ -145,6 +147,76 @@ document.getElementById('ads-seconds-slider').addEventListener('input', async (e
   document.getElementById('ads-seconds-value').textContent = n
   settings.adsSecondsPerImage = n
   await jukebox.saveSettings(settings)
+})
+
+// --- Web ad uploads (the standalone mslsc-jukebox-ad-upload page) ---
+
+document.getElementById('copy-ad-upload-url-btn').addEventListener('click', async () => {
+  const input = document.getElementById('ad-upload-url')
+  input.select()
+  try {
+    await navigator.clipboard.writeText(input.value)
+    document.getElementById('web-ads-sync-status').textContent = 'Link copied.'
+  } catch {
+    // Clipboard permission can be finicky in a packaged Electron app -
+    // the text is already selected either way, so Ctrl+C still works.
+    document.getElementById('web-ads-sync-status').textContent = 'Could not copy automatically - it\'s selected, try Ctrl+C.'
+  }
+})
+
+document.getElementById('save-ad-upload-passphrase-btn').addEventListener('click', async () => {
+  settings.adUploadPassphrase = document.getElementById('ad-upload-passphrase').value.trim()
+  await jukebox.saveSettings(settings)
+  document.getElementById('web-ads-sync-status').textContent = 'Passphrase saved.'
+})
+
+// Renders the source-of-truth remote list (not just whatever's synced
+// locally) with a Delete button per ad - deleting here calls the exact
+// same function the upload page's own Delete button does, using the
+// passphrase saved above.
+async function renderWebAdsList() {
+  const container = document.getElementById('web-ads-list')
+  try {
+    const { files } = await jukebox.listRemoteAds()
+    container.innerHTML = files.map((f) => `
+      <div class="web-ad-row">
+        <img src="${f.url}" alt="" />
+        <span title="${f.filename}">${f.filename}</span>
+        <button class="danger" data-remote-delete="${f.path}">Delete</button>
+      </div>
+    `).join('') || '<p class="eyebrow">No web-uploaded ads yet.</p>'
+
+    container.querySelectorAll('[data-remote-delete]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const passphrase = document.getElementById('ad-upload-passphrase').value.trim()
+        if (!passphrase) {
+          document.getElementById('web-ads-sync-status').textContent = 'Enter and save the passphrase first.'
+          return
+        }
+        if (!confirm('Remove this ad? It stops showing in the slideshow immediately.')) return
+        const result = await jukebox.deleteRemoteAd(passphrase, btn.dataset.remoteDelete)
+        if (!result.ok) { document.getElementById('web-ads-sync-status').textContent = `Could not delete: ${result.error}`; return }
+        await renderWebAdsList()
+      })
+    })
+  } catch (err) {
+    container.innerHTML = `<p class="eyebrow">Could not load the web ad list: ${err.message}</p>`
+  }
+}
+renderWebAdsList()
+
+jukebox.getAdUploadUrl().then((url) => { document.getElementById('ad-upload-url').value = url })
+
+// The background sync (main.js, every ~2 minutes) reports in here either
+// way - only worth re-rendering the list when it actually changed
+// something, so an unrelated tick doesn't reset anyone mid-scroll.
+jukebox.onWebAdsSynced((result) => {
+  const status = document.getElementById('web-ads-sync-status')
+  if (!result.ok) { status.textContent = `Web ad sync: ${result.error}`; return }
+  status.textContent = result.downloaded || result.removed
+    ? `Synced: ${result.downloaded} new, ${result.removed} removed.`
+    : ''
+  if (result.downloaded || result.removed) renderWebAdsList()
 })
 
 document.getElementById('crossfade-slider').addEventListener('input', async (e) => {

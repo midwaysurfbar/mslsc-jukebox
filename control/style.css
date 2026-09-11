@@ -61,6 +61,11 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
 .settings-card label{display:grid;gap:8px;font-weight:700}
 .settings-card input[readonly]{flex:1;background:#f4f7f6}
 .settings-card.danger-zone{border-color:#e6b8b8}
+.web-ads-list{display:grid;gap:6px;max-height:220px;overflow-y:auto}
+.web-ads-list .web-ad-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #e2e8ea;border-radius:8px;background:#f9fbfb}
+.web-ads-list .web-ad-row img{width:36px;height:24px;object-fit:cover;border-radius:4px;flex:0 0 auto;background:#e2e8ea}
+.web-ads-list .web-ad-row span{flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.web-ads-list .web-ad-row button{flex:0 0 auto;padding:5px 10px;font-size:0.76rem}
 .toggle-row{display:flex!important;flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
 .toggle-switch{display:inline-block;position:relative;width:46px;height:26px;flex:0 0 auto}
 .toggle-switch input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer;z-index:1}
