@@ -1162,6 +1162,14 @@ ipcMain.on('player:state', (_event, state) => {
   if (controlWindow) controlWindow.webContents.send('player:state', state)
 })
 
+// Same reopen logic as the tray's "Show on TV" item, exposed as a
+// regular button in Control itself - the tray's right-click menu is
+// easy to never discover at all.
+ipcMain.handle('display:reopen', () => {
+  reopenDisplayWindow()
+  return true
+})
+
 // --- Tray + auto-update (mirrors MSLSC Shell's proven pattern) ---
 
 function createTray() {
@@ -1175,11 +1183,28 @@ function createTray() {
   })
 }
 
+// The Display window's own close handler already turns an accidental
+// close into a hide rather than a real destroy (see createDisplayWindow)
+// - so normally .show() is all this needs. Recreating it from scratch
+// when it genuinely is gone (a crash, or any other edge case) means
+// this can never be a dead end that only a full app restart gets out of
+// - Sam, 2026-09-12: "when the 2nd screen window is accidently closed
+// there is no way of re-opening the tv window other than shutting down
+// the system".
+function reopenDisplayWindow() {
+  if (displayWindow && !displayWindow.isDestroyed()) {
+    displayWindow.show()
+    displayWindow.focus()
+  } else {
+    createDisplayWindow()
+  }
+}
+
 function refreshTrayMenu() {
   if (!tray) return
   const items = [
     { label: 'Open Control Panel', click: () => { controlWindow.show(); controlWindow.focus() } },
-    { label: 'Show on TV', click: () => { displayWindow.show() } },
+    { label: 'Show on TV', click: () => reopenDisplayWindow() },
   ]
   if (updateReady) {
     items.push({ type: 'separator' })

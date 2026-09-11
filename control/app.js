@@ -99,6 +99,8 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
   })
 })
 
+document.getElementById('reopen-display-btn').addEventListener('click', () => jukebox.reopenDisplay())
+
 // --- Settings ---
 async function loadSettings() {
   settings = await jukebox.getSettings()

@@ -72,6 +72,11 @@ contextBridge.exposeInMainWorld('jukebox', {
   // Player state (relayed back from the Display window)
   onPlayerState: (callback) => ipcRenderer.on('player:state', (_event, state) => callback(state)),
 
+  // Brings the TV/Display window back if it was accidentally closed -
+  // same effect as the tray icon's "Show on TV" item, just somewhere
+  // actually visible.
+  reopenDisplay: () => ipcRenderer.invoke('display:reopen'),
+
   // Fires (debounced) whenever main's live filesystem watch notices a
   // change under the media folder - a new folder, added/removed/moved
   // files, all of it - so Control can silently re-run the same scan
