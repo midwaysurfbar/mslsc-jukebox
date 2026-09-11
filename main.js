@@ -218,20 +218,38 @@ function formatSessionTime12h(hhmmss) {
   return m === 0 ? `${hour12}${period}` : `${hour12}:${String(m).padStart(2, '0')}${period}`
 }
 
+// Longer titles shrink instead of running toward the edge of the
+// title-safe area below - Sam, 2026-09-12: a real "Friday Club Bar
+// Session" title got its last few letters cut clean off on the venue's
+// actual TV, even though the full text sat comfortably inside the
+// rendered 1920x1080 image with room to spare - the TV's own Overscan/
+// Zoom picture mode was cropping the edges of the incoming PC signal.
+// That needs fixing on the TV itself, but a broadcast-standard
+// "title-safe" margin (keep text within the inner ~80% of the frame)
+// means this can't be clipped even on a TV where it isn't.
+function titleFontSizeFor(title) {
+  const len = title.length
+  if (len > 32) return 68
+  if (len > 24) return 82
+  if (len > 18) return 96
+  return 112
+}
+
 // Inline template, not a separate file - no external resources needed
 // (system fonts only), which also sidesteps adding a new file to
 // package.json's electron-builder "files" whitelist.
 function buildBarSessionAdHtml(session) {
   const dateLabel = formatSessionDate(session.eventDate)
   const timeLabel = `${formatSessionTime12h(session.startTime)}–${formatSessionTime12h(session.endTime)}`
+  const titleFontSize = titleFontSizeFor(session.title)
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{margin:0;padding:0;width:1920px;height:1080px;overflow:hidden;background:linear-gradient(135deg,#0d2635,#153b50 55%,#1c4f66);font-family:Arial,Helvetica,sans-serif}
-    .wrap{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#eef6f7;text-align:center;box-sizing:border-box;padding:100px;position:relative}
+    .wrap{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#eef6f7;text-align:center;box-sizing:border-box;padding:110px 180px;position:relative}
     .eyebrow{font-size:40px;letter-spacing:12px;text-transform:uppercase;color:#5fd0e0;font-weight:700;margin-bottom:32px}
-    .title{font-size:112px;font-weight:800;line-height:1.1;max-width:1600px;margin:0 0 46px;text-shadow:0 4px 18px rgba(0,0,0,.35)}
+    .title{font-size:${titleFontSize}px;font-weight:800;line-height:1.15;margin:0 0 46px;text-shadow:0 4px 18px rgba(0,0,0,.35)}
     .date{font-size:60px;font-weight:700;color:#ffffff;margin-bottom:16px}
     .time{font-size:50px;font-weight:600;color:#bfe3ea}
-    .footer{position:absolute;bottom:64px;font-size:30px;letter-spacing:4px;color:#7fa8b8;font-weight:700;text-transform:uppercase}
+    .footer{position:absolute;left:0;right:0;bottom:74px;text-align:center;font-size:30px;letter-spacing:4px;color:#7fa8b8;font-weight:700;text-transform:uppercase}
     .bar{position:absolute;left:0;bottom:0;width:100%;height:14px;background:linear-gradient(90deg,#2b7182,#5fd0e0)}
   </style></head><body><div class="wrap">
     <div class="eyebrow">Coming Up</div>
