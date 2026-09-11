@@ -120,6 +120,8 @@ async function loadSettings() {
   document.getElementById('ads-seconds-value').textContent = settings.adsSecondsPerImage
 
   document.getElementById('ad-upload-passphrase').value = settings.adUploadPassphrase || ''
+
+  document.getElementById('bar-session-ads-enabled-toggle').checked = Boolean(settings.barSessionAdsEnabled)
 }
 
 document.getElementById('choose-folder-btn').addEventListener('click', async () => {
@@ -217,6 +219,33 @@ jukebox.onWebAdsSynced((result) => {
     ? `Synced: ${result.downloaded} new, ${result.removed} removed.`
     : ''
   if (result.downloaded || result.removed) renderWebAdsList()
+})
+
+// --- Auto-generated "upcoming bar session" ads ---
+
+document.getElementById('bar-session-ads-enabled-toggle').addEventListener('change', async (e) => {
+  settings.barSessionAdsEnabled = e.target.checked
+  await jukebox.saveSettings(settings)
+  if (e.target.checked) await jukebox.syncBarSessionAdsNow()
+})
+
+document.getElementById('sync-bar-session-ads-btn').addEventListener('click', async () => {
+  document.getElementById('bar-session-ads-sync-status').textContent = 'Syncing…'
+  const result = await jukebox.syncBarSessionAdsNow()
+  const status = document.getElementById('bar-session-ads-sync-status')
+  status.textContent = result.ok
+    ? (result.skipped ? 'Turn on "Show as ads" first.' : `Synced: ${result.added} added, ${result.removed} removed, ${result.updated} updated (${result.total} showing).`)
+    : `Could not sync: ${result.error}`
+})
+
+// Same "reports in every pass either way" shape as onWebAdsSynced above.
+jukebox.onBarSessionAdsSynced((result) => {
+  const status = document.getElementById('bar-session-ads-sync-status')
+  if (!result.ok) { status.textContent = `Bar session ad sync: ${result.error}`; return }
+  if (result.skipped) return
+  if (result.added || result.removed || result.updated) {
+    status.textContent = `Synced: ${result.added} added, ${result.removed} removed, ${result.updated} updated (${result.total} showing).`
+  }
 })
 
 document.getElementById('crossfade-slider').addEventListener('input', async (e) => {

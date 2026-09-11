@@ -42,6 +42,14 @@ const CONVERTED_DIR = path.join(USER_DATA, 'converted')
 // combined ad-slideshow list is just the two folders' contents added
 // together (see ads-folder:list).
 const WEB_ADS_DIR = path.join(USER_DATA, 'web-ads')
+// Auto-generated "upcoming bar session" ads (see syncBarSessionAds
+// below) - a THIRD ad source, deliberately its own folder rather than
+// living inside WEB_ADS_DIR, since syncWebAds treats that folder as a
+// mirror of the jukebox-ads bucket and deletes anything in it that
+// isn't in the bucket's own listing. These ads never touch that bucket
+// at all - they're rendered and managed entirely locally.
+const BAR_SESSION_ADS_DIR = path.join(USER_DATA, 'bar-session-ads')
+const BAR_SESSION_ADS_MANIFEST_PATH = path.join(BAR_SESSION_ADS_DIR, 'manifest.json')
 
 const DEFAULT_SETTINGS = {
   mediaFolder: '',
@@ -58,6 +66,10 @@ const DEFAULT_SETTINGS = {
   // here same as any other setting. Never sent anywhere except the
   // jukebox-ads function's own delete action.
   adUploadPassphrase: '',
+  // Auto-generated "upcoming bar session" ads - off by default like
+  // every other ad-related setting. No passphrase field for this one -
+  // see BAR_SESSION_FEED_SECRET below, it's not a human-shared value.
+  barSessionAdsEnabled: false,
 }
 
 // The standalone web page (separate repo: mslsc-jukebox-ad-upload) and
@@ -70,6 +82,17 @@ const JUKEBOX_AD_UPLOAD_PAGE = 'https://midwaysurfjukeboxads.vercel.app'
 const JUKEBOX_ADS_FN_URL = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/jukebox-ads'
 const JUKEBOX_ADS_ANON_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj'
 const WEB_ADS_SYNC_INTERVAL_MS = 2 * 60 * 1000
+
+// Bar Booking System's feed of upcoming bar sessions (same shared
+// Supabase project) - BAR_SESSION_FEED_SECRET isn't a human-shared
+// value like adUploadPassphrase, it exists purely to keep casual
+// scraping off a feed of real booking titles/dates, same threat model
+// as the anon key above already being "not a secret" - so it's a
+// second hardcoded constant rather than a Settings text field.
+const UPCOMING_BAR_SESSIONS_FN_URL = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/upcoming-bar-sessions'
+const BAR_SESSION_FEED_SECRET = 'mS_ZTya-w3ZqjLNpfGeFMP4TvQSE_vlH'
+const BAR_SESSION_SYNC_INTERVAL_MS = 30 * 60 * 1000
+const BAR_SESSION_AD_HORIZON_DAYS = 14
 
 function callJukeboxAdsFn(body) {
   return fetch(JUKEBOX_ADS_FN_URL, {
@@ -137,6 +160,189 @@ function readJson(filePath, fallback) {
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.writeFileSync(filePath, JSON.stringify(value))
+}
+
+// --- Auto-generated "upcoming bar session" ads ---
+//
+// Renders a real ad image for every bar session the Bar Booking System
+// says is upcoming (see upcoming-bar-sessions Edge Function) and keeps
+// BAR_SESSION_ADS_DIR reconciled to that list on a timer - a session
+// that's no longer in the list (its date arrived, it got cancelled, or
+// a standing occurrence got closed) has its ad deleted on the very next
+// pass. One diff pass handles add/update/remove together.
+
+function callUpcomingBarSessionsFn(horizonDays) {
+  return fetch(UPCOMING_BAR_SESSIONS_FN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-bar-session-feed-secret': BAR_SESSION_FEED_SECRET,
+    },
+    body: JSON.stringify({ horizonDays }),
+  }).then((r) => r.json())
+}
+
+// The session title is free text a committee member typed when creating
+// a booking or standing rule - has to be escaped before it goes into
+// the ad's HTML, or a stray < or & breaks the layout.
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
+function formatSessionDate(eventDate) {
+  return new Date(`${eventDate}T00:00:00`).toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+function formatSessionTime12h(hhmmss) {
+  const [h, m] = hhmmss.split(':').map(Number)
+  const period = h < 12 ? 'am' : 'pm'
+  const hour12 = h % 12 === 0 ? 12 : h % 12
+  return m === 0 ? `${hour12}${period}` : `${hour12}:${String(m).padStart(2, '0')}${period}`
+}
+
+// Inline template, not a separate file - no external resources needed
+// (system fonts only), which also sidesteps adding a new file to
+// package.json's electron-builder "files" whitelist.
+function buildBarSessionAdHtml(session) {
+  const dateLabel = formatSessionDate(session.eventDate)
+  const timeLabel = `${formatSessionTime12h(session.startTime)}–${formatSessionTime12h(session.endTime)}`
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    html,body{margin:0;padding:0;width:1920px;height:1080px;overflow:hidden;background:linear-gradient(135deg,#0d2635,#153b50 55%,#1c4f66);font-family:Arial,Helvetica,sans-serif}
+    .wrap{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#eef6f7;text-align:center;box-sizing:border-box;padding:100px;position:relative}
+    .eyebrow{font-size:40px;letter-spacing:12px;text-transform:uppercase;color:#5fd0e0;font-weight:700;margin-bottom:32px}
+    .title{font-size:112px;font-weight:800;line-height:1.1;max-width:1600px;margin:0 0 46px;text-shadow:0 4px 18px rgba(0,0,0,.35)}
+    .date{font-size:60px;font-weight:700;color:#ffffff;margin-bottom:16px}
+    .time{font-size:50px;font-weight:600;color:#bfe3ea}
+    .footer{position:absolute;bottom:64px;font-size:30px;letter-spacing:4px;color:#7fa8b8;font-weight:700;text-transform:uppercase}
+    .bar{position:absolute;left:0;bottom:0;width:100%;height:14px;background:linear-gradient(90deg,#2b7182,#5fd0e0)}
+  </style></head><body><div class="wrap">
+    <div class="eyebrow">Coming Up</div>
+    <div class="title">${escapeHtml(session.title)}</div>
+    <div class="date">${dateLabel}</div>
+    <div class="time">${timeLabel}</div>
+    <div class="footer">Midway Surf Life Saving Club &middot; Bar</div>
+    <div class="bar"></div>
+  </div></body></html>`
+}
+
+// NOT ":" in the allowed set - a sourceKey like "standing:<uuid>:<date>"
+// would otherwise produce a colon-containing filename, which NTFS on
+// the real venue PC (Windows) reserves for alternate-data-stream syntax
+// and can reject or mishandle - caught by actually running this against
+// a real sourceKey rather than just reasoning about it.
+function sanitizeSourceKey(key) {
+  return String(key).replace(/[^a-zA-Z0-9_-]/g, '-')
+}
+
+// Off-screen BrowserWindow + capturePage() - Electron's own Chromium
+// renderer, used as a free screenshot engine. show:false is the
+// standard technique for this, though a small number of Electron/
+// Chromium versions have returned a blank capture from a never-shown
+// window on certain GPU drivers - if that turns out to be the case on
+// the venue PC, the fallback is positioning the window off every
+// display's bounds and calling show() before capturing instead.
+async function renderBarSessionAdPng(session) {
+  const html = buildBarSessionAdHtml(session)
+  const win = new BrowserWindow({
+    show: false,
+    skipTaskbar: true,
+    frame: false,
+    useContentSize: true,
+    width: 1920,
+    height: 1080,
+  })
+  try {
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    try {
+      await win.webContents.executeJavaScript(
+        'document.fonts && document.fonts.ready ? document.fonts.ready.then(() => true) : true'
+      )
+    } catch { /* system fonts only - this is a hedge, not a requirement */ }
+    await new Promise((resolve) => setTimeout(resolve, 150))
+    const image = await win.webContents.capturePage()
+    return image.toPNG()
+  } finally {
+    win.destroy()
+  }
+}
+
+// Reconciles BAR_SESSION_ADS_DIR to the current eligible-sessions list -
+// renders/saves a PNG for anything new, re-renders anything whose
+// content changed (a committee member can edit a booking's title/time
+// after ads for it already exist), and deletes anything no longer
+// eligible (date passed, cancelled, or a standing date got closed).
+async function syncBarSessionAds() {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  if (!settings.barSessionAdsEnabled) return { ok: true, skipped: true, added: 0, removed: 0, updated: 0, total: 0 }
+
+  let sessions
+  try {
+    const data = await callUpcomingBarSessionsFn(BAR_SESSION_AD_HORIZON_DAYS)
+    if (!data.ok) throw new Error(data.error || 'Could not load upcoming bar sessions.')
+    sessions = data.sessions
+  } catch (err) {
+    return { ok: false, error: err.message }
+  }
+
+  fs.mkdirSync(BAR_SESSION_ADS_DIR, { recursive: true })
+  const manifest = readJson(BAR_SESSION_ADS_MANIFEST_PATH, { entries: {} })
+  const eligibleByKey = new Map(sessions.map((s) => [s.sourceKey, s]))
+
+  let added = 0
+  let removed = 0
+  let updated = 0
+
+  for (const key of Object.keys(manifest.entries)) {
+    if (!eligibleByKey.has(key)) {
+      try { fs.rmSync(path.join(BAR_SESSION_ADS_DIR, manifest.entries[key].pngFilename), { force: true }) } catch { /* best effort */ }
+      delete manifest.entries[key]
+      removed += 1
+    }
+  }
+
+  for (const [key, session] of eligibleByKey) {
+    const signature = JSON.stringify([session.title, session.eventDate, session.startTime, session.endTime])
+    const existing = manifest.entries[key]
+    if (existing && existing.signature === signature) continue
+
+    let pngBuffer
+    try {
+      pngBuffer = await renderBarSessionAdPng(session)
+    } catch {
+      continue // try again next pass rather than failing the whole sync
+    }
+
+    if (existing) {
+      try { fs.rmSync(path.join(BAR_SESSION_ADS_DIR, existing.pngFilename), { force: true }) } catch { /* best effort */ }
+    }
+
+    const pngFilename = `${sanitizeSourceKey(key)}.png`
+    fs.writeFileSync(path.join(BAR_SESSION_ADS_DIR, pngFilename), pngBuffer)
+    manifest.entries[key] = { pngFilename, signature, generatedAt: new Date().toISOString() }
+    if (existing) updated += 1
+    else added += 1
+  }
+
+  if (added > 0 || removed > 0 || updated > 0) writeJson(BAR_SESSION_ADS_MANIFEST_PATH, manifest)
+
+  return { ok: true, added, removed, updated, total: Object.keys(manifest.entries).length }
+}
+
+// Same "run now, then every interval" shape as startSyncingWebAds - the
+// settings:updated broadcast (only when something actually changed) is
+// what makes a new/removed bar-session ad show up in the slideshow on
+// its own.
+function startSyncingBarSessionAds() {
+  const runSync = async () => {
+    const result = await syncBarSessionAds()
+    if (controlWindow) controlWindow.webContents.send('bar-session-ads:synced', result)
+    if (result.ok && (result.added > 0 || result.removed > 0 || result.updated > 0) && displayWindow) {
+      const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+      displayWindow.webContents.send('settings:updated', settings)
+    }
+  }
+  runSync()
+  setInterval(runSync, BAR_SESSION_SYNC_INTERVAL_MS)
 }
 
 // Deliberately NOT keyed on mtime - copying files onto the PC (from a
@@ -596,6 +802,10 @@ ipcMain.handle('ads-folder:list', () => {
   const files = []
   if (settings.adsFolder) files.push(...walkImageFiles(settings.adsFolder))
   if (fs.existsSync(WEB_ADS_DIR)) files.push(...walkImageFiles(WEB_ADS_DIR))
+  // Gated on the setting (not just folder existence) so turning
+  // barSessionAdsEnabled off immediately stops these showing, rather
+  // than waiting for the next sync pass to clean the folder out.
+  if (settings.barSessionAdsEnabled && fs.existsSync(BAR_SESSION_ADS_DIR)) files.push(...walkImageFiles(BAR_SESSION_ADS_DIR))
   return { files }
 })
 
@@ -604,6 +814,10 @@ ipcMain.handle('ads-folder:list', () => {
 ipcMain.handle('web-ads:get-upload-url', () => JUKEBOX_AD_UPLOAD_PAGE)
 
 ipcMain.handle('web-ads:sync', () => syncWebAds())
+
+// --- Auto-generated bar-session ads (see syncBarSessionAds above) ---
+
+ipcMain.handle('bar-session-ads:sync-now', () => syncBarSessionAds())
 
 // Separate from the sync above (which just reconciles the local cache) -
 // this is what Settings' own managed list renders, straight from the
@@ -962,6 +1176,7 @@ app.whenReady().then(() => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   startWatchingMediaFolder(settings.mediaFolder)
   startSyncingWebAds()
+  startSyncingBarSessionAds()
 })
 
 app.on('before-quit', () => {

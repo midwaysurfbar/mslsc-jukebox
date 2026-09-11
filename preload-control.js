@@ -87,4 +87,10 @@ contextBridge.exposeInMainWorld('jukebox', {
   // whether or not it actually changed anything, so Settings can show a
   // live "last checked" status.
   onWebAdsSynced: (callback) => ipcRenderer.on('web-ads:synced', (_event, result) => callback(result)),
+
+  // Auto-generated "upcoming bar session" ads (see syncBarSessionAds in
+  // main.js) - same "fires every pass, whether or not it changed
+  // anything" status pattern as onWebAdsSynced above.
+  syncBarSessionAdsNow: () => ipcRenderer.invoke('bar-session-ads:sync-now'),
+  onBarSessionAdsSynced: (callback) => ipcRenderer.on('bar-session-ads:synced', (_event, result) => callback(result)),
 })
