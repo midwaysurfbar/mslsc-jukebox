@@ -318,9 +318,20 @@ async function generateThumbAndDuration(track) {
     video.src = toFileUrl(playablePath(track))
     video.addEventListener('loadedmetadata', () => {
       metadataLoaded = true
-      track.duration = video.duration
-      track.error = false
-      track.needsConversion = false
+      // loadedmetadata firing only means Chromium could read the
+      // container's headers, not that the duration in them is real - a
+      // malformed/missing moov atom (or similar) can report 0, NaN, or
+      // Infinity here despite otherwise looking "loaded fine", which
+      // used to sail through as a false success and just show "0:00" in
+      // the library with no indication anything was wrong. Treated the
+      // same as a hard decode error now - re-encoding through Convert
+      // often fixes a bad duration atom, so it's still worth offering
+      // that first rather than only concluding this file is unplayable.
+      const validDuration = Number.isFinite(video.duration) && video.duration > 0
+      track.duration = validDuration ? video.duration : 0
+      track.error = !validDuration
+      track.needsConversion = !validDuration && !track.convertedPath
+      if (!validDuration) { finish(); return }
       if (existingThumb) { track.thumbPath = existingThumb; finish(); return }
       video.currentTime = Math.min(3, video.duration / 2 || 0)
     })
@@ -553,11 +564,24 @@ function renderLibrary() {
   grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => runLibraryOp(() => deleteFile(el.dataset.deleteFile))))
 }
 
+// Shared by both deleteFile (manual) and convertTrack's auto-remove
+// path below - keeps local state from ever drifting from what main
+// actually did to playlists.json/queue.json, using exactly what it
+// returned rather than re-deriving it here.
+function removeTrackFromState(key, result) {
+  playlists = result.playlists
+  queue = result.queue
+  library = library.filter((t) => t.key !== key)
+  delete metadataCache[key]
+  renderLibrary()
+  renderPlaylists()
+  renderQueue()
+  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+}
+
 // Permanently removes one file from the actual media drive - not just
 // this library list. Confirms first since, unlike Reset Library, this
-// really can't be undone (no re-scan brings it back), then cleans the
-// track out of local state using exactly what main returned, so playlists
-// and the queue can never drift from what's now on disk.
+// really can't be undone (no re-scan brings it back).
 async function deleteFile(key) {
   const track = trackByKey(key)
   if (!track) return
@@ -570,15 +594,8 @@ async function deleteFile(key) {
 
   try {
     const result = await jukebox.deleteFile(key, track.path)
-    playlists = result.playlists
-    queue = result.queue
-    library = library.filter((t) => t.key !== key)
-    delete metadataCache[key]
+    removeTrackFromState(key, result)
     document.getElementById('library-status').textContent = `Deleted "${track.filename}" from the drive.`
-    renderLibrary()
-    renderPlaylists()
-    renderQueue()
-    jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
   } catch (err) {
     document.getElementById('library-status').textContent = `Could not delete "${track.filename}": ${err.message}`
   }
@@ -622,50 +639,79 @@ async function moveTrackToFolder(key, folderPath) {
 // gets - generateThumbAndDuration already prefers a converted copy the
 // moment one exists, so this is the only place that needs to know
 // conversion happened at all.
-// Returns whether the conversion actually succeeded, so a caller
-// converting several tracks in a row (see convert-all-btn below) can
-// tell which ones failed instead of only ever seeing the last thing
-// written to library-status.
+//
+// A file that still can't be played after this - ffmpeg itself failed,
+// or it "succeeded" but the result still reports an invalid duration
+// (see the loadedmetadata handler above) - is automatically sent to the
+// Recycle Bin rather than left sitting in the library looking broken
+// (Sam, 2026-09-12: "i dont want files hanging around the system if the
+// system cant play them ... messy and embarrassing"). Recycle Bin, not
+// a permanent delete, since this runs with no human double-checking the
+// specific file first - a false positive should still be recoverable.
+//
+// Returns 'ok', 'removed', or 'failed' (removal itself also failed) so
+// a caller converting several tracks in a row (see convert-all-btn
+// below) can build an accurate summary instead of only ever seeing the
+// last thing written to library-status.
 async function convertTrack(key) {
   const track = trackByKey(key)
-  if (!track || track.converting) return true
+  if (!track || track.converting) return 'ok'
   track.converting = true
   renderLibrary()
-  let ok = true
+  let failureReason = ''
   try {
     track.convertedPath = await jukebox.convertFile(key, track.path)
     track.needsConversion = false
   } catch (err) {
-    document.getElementById('library-status').textContent = `Could not convert "${track.filename}": ${err.message}`
-    ok = false
+    failureReason = err.message
   }
   track.converting = false
   await generateThumbAndDuration(track)
-  renderLibrary()
-  return ok
+
+  const stillBroken = Boolean(failureReason) || track.error
+  if (!stillBroken) {
+    renderLibrary()
+    return 'ok'
+  }
+
+  const reason = failureReason || 'the converted file still could not be played correctly'
+  try {
+    const result = await jukebox.trashUnplayableFile(key, track.path)
+    removeTrackFromState(key, result)
+    document.getElementById('library-status').textContent = `Removed "${track.filename}" (sent to Recycle Bin) - could not be made playable: ${reason}`
+    return 'removed'
+  } catch (removeErr) {
+    document.getElementById('library-status').textContent = `Could not convert "${track.filename}": ${reason}. Also failed to remove it: ${removeErr.message}`
+    renderLibrary()
+    return 'failed'
+  }
 }
 
 document.getElementById('convert-all-btn').addEventListener('click', async () => {
   const status = document.getElementById('library-status')
   const toConvert = library.filter((t) => t.needsConversion && !t.converting)
+  const removed = []
   const failed = []
   for (let i = 0; i < toConvert.length; i++) {
     status.textContent = `Converting ${i + 1}/${toConvert.length}: "${toConvert[i].filename}"…`
-    const ok = await convertTrack(toConvert[i].key)
-    if (!ok) failed.push(toConvert[i].filename)
+    const outcome = await convertTrack(toConvert[i].key)
+    if (outcome === 'removed') removed.push(toConvert[i].filename)
+    else if (outcome === 'failed') failed.push(toConvert[i].filename)
   }
   // Previously this always blanked the status line at the end (or the
   // next file's "Converting…" line stomped it mid-loop), so a failure
   // was shown for a fraction of a second and then erased - the button
   // looked like it ran with no visible sign anything had gone wrong,
   // even though the file was left flagged "Needs conversion". Now a
-  // failure summary actually stays on screen.
+  // summary of what actually happened stays on screen.
   if (!toConvert.length) {
     status.textContent = 'Nothing needs converting right now.'
-  } else if (failed.length) {
-    status.textContent = `Converted ${toConvert.length - failed.length} of ${toConvert.length} - failed: ${failed.join(', ')}. Convert a failed one individually to see its full error.`
   } else {
-    status.textContent = `Converted ${toConvert.length} file${toConvert.length === 1 ? '' : 's'}.`
+    const okCount = toConvert.length - removed.length - failed.length
+    const parts = [`Converted ${okCount} of ${toConvert.length}`]
+    if (removed.length) parts.push(`${removed.length} removed as unplayable: ${removed.join(', ')}`)
+    if (failed.length) parts.push(`${failed.length} still failing: ${failed.join(', ')}`)
+    status.textContent = `${parts.join(' - ')}.`
   }
 })
 

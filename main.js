@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, screen } = require('electron')
+const { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, dialog, screen, shell } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('node:path')
 const fs = require('node:fs')
@@ -892,21 +892,25 @@ ipcMain.handle('library:reset-all', () => {
 // Permanently deletes one real video file from the media drive - the one
 // place in the app that ever does that (library:reset-all above only ever
 // touches this app's own cache/settings, never a source file). Kept
-// deliberately narrow: refuses anything outside the currently configured
-// media folder, so it can never be pointed at an arbitrary path, and
-// always cleans up every trace of the file - its cached thumbnail/
-// converted copy, its metadata guess, and any playlist/queue entry -
-// so nothing is left dangling on a key that no longer resolves to a file.
-ipcMain.handle('library:delete-file', (_event, key, filePath) => {
+// Deliberately narrow: refuses anything outside the currently configured
+// media folder, so it can never be pointed at an arbitrary path.
+function resolveInsideMediaFolder(filePath) {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
   const resolved = path.resolve(filePath)
   if (!mediaFolder || (resolved !== mediaFolder && !resolved.startsWith(mediaFolder + path.sep))) {
-    throw new Error('Refusing to delete a file outside the configured media folder.')
+    return null
   }
+  return resolved
+}
 
-  fs.rmSync(resolved, { force: true })
-
+// Cleans up every trace of a file that's gone (however it went) - its
+// cached thumbnail/converted copy, its metadata guess, and any
+// playlist/queue entry - so nothing is left dangling on a key that no
+// longer resolves to a file. Shared by the manual delete and the
+// automatic unplayable-file removal below, since both need identical
+// bookkeeping once the actual file is gone.
+function purgeDerivedState(key) {
   for (const dir of [THUMBNAILS_DIR, CONVERTED_DIR]) {
     try {
       for (const name of fs.readdirSync(dir)) {
@@ -932,6 +936,28 @@ ipcMain.handle('library:delete-file', (_event, key, filePath) => {
   writeJson(QUEUE_PATH, queue)
 
   return { playlists, queue }
+}
+
+ipcMain.handle('library:delete-file', (_event, key, filePath) => {
+  const resolved = resolveInsideMediaFolder(filePath)
+  if (!resolved) throw new Error('Refusing to delete a file outside the configured media folder.')
+  fs.rmSync(resolved, { force: true })
+  return purgeDerivedState(key)
+})
+
+// Used only when a file has just been confirmed unplayable - a
+// conversion attempt failed outright, or "succeeded" but the result
+// still can't produce a valid duration (see generateThumbAndDuration in
+// control/app.js). Sam, 2026-09-12: "i dont want files hanging around
+// the system if the system cant play them ... messy and embarrassing" -
+// but this runs automatically with no human double-checking the
+// specific file first, so it goes to the Recycle Bin rather than a
+// permanent delete, in case it's ever wrong about a fixable file.
+ipcMain.handle('library:trash-unplayable-file', async (_event, key, filePath) => {
+  const resolved = resolveInsideMediaFolder(filePath)
+  if (!resolved) throw new Error('Refusing to remove a file outside the configured media folder.')
+  await shell.trashItem(resolved)
+  return purgeDerivedState(key)
 })
 
 // --- IPC: thumbnails (generated client-side in Control via <video>+<canvas>, saved here) ---

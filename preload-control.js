@@ -26,6 +26,11 @@ contextBridge.exposeInMainWorld('jukebox', {
   // library action that DOES touch a source file. Returns the cleaned-up
   // playlists/queue with every reference to it already removed.
   deleteFile: (key, filePath) => ipcRenderer.invoke('library:delete-file', key, filePath),
+  // Same cleanup as deleteFile, but sends the source to the Recycle Bin
+  // instead of permanently deleting it - used automatically when a
+  // conversion attempt confirms a file can never be played (see
+  // convertTrack in control/app.js), never from a direct user click.
+  trashUnplayableFile: (key, filePath) => ipcRenderer.invoke('library:trash-unplayable-file', key, filePath),
 
   // Physically moves confidently-matched, currently-unsorted files into
   // decade subfolders (e.g. "1980s") based on cached metadata - see
