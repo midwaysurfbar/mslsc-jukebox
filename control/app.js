@@ -622,30 +622,51 @@ async function moveTrackToFolder(key, folderPath) {
 // gets - generateThumbAndDuration already prefers a converted copy the
 // moment one exists, so this is the only place that needs to know
 // conversion happened at all.
+// Returns whether the conversion actually succeeded, so a caller
+// converting several tracks in a row (see convert-all-btn below) can
+// tell which ones failed instead of only ever seeing the last thing
+// written to library-status.
 async function convertTrack(key) {
   const track = trackByKey(key)
-  if (!track || track.converting) return
+  if (!track || track.converting) return true
   track.converting = true
   renderLibrary()
+  let ok = true
   try {
     track.convertedPath = await jukebox.convertFile(key, track.path)
     track.needsConversion = false
   } catch (err) {
     document.getElementById('library-status').textContent = `Could not convert "${track.filename}": ${err.message}`
+    ok = false
   }
   track.converting = false
   await generateThumbAndDuration(track)
   renderLibrary()
+  return ok
 }
 
 document.getElementById('convert-all-btn').addEventListener('click', async () => {
   const status = document.getElementById('library-status')
   const toConvert = library.filter((t) => t.needsConversion && !t.converting)
+  const failed = []
   for (let i = 0; i < toConvert.length; i++) {
     status.textContent = `Converting ${i + 1}/${toConvert.length}: "${toConvert[i].filename}"…`
-    await convertTrack(toConvert[i].key)
+    const ok = await convertTrack(toConvert[i].key)
+    if (!ok) failed.push(toConvert[i].filename)
   }
-  status.textContent = toConvert.length ? '' : 'Nothing needs converting right now.'
+  // Previously this always blanked the status line at the end (or the
+  // next file's "Converting…" line stomped it mid-loop), so a failure
+  // was shown for a fraction of a second and then erased - the button
+  // looked like it ran with no visible sign anything had gone wrong,
+  // even though the file was left flagged "Needs conversion". Now a
+  // failure summary actually stays on screen.
+  if (!toConvert.length) {
+    status.textContent = 'Nothing needs converting right now.'
+  } else if (failed.length) {
+    status.textContent = `Converted ${toConvert.length - failed.length} of ${toConvert.length} - failed: ${failed.join(', ')}. Convert a failed one individually to see its full error.`
+  } else {
+    status.textContent = `Converted ${toConvert.length} file${toConvert.length === 1 ? '' : 's'}.`
+  }
 })
 
 // --- Queue ---

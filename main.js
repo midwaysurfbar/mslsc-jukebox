@@ -955,6 +955,13 @@ ipcMain.handle('convert:get-path', (_event, key) => {
   return fs.existsSync(filePath) ? filePath : null
 })
 
+// No hard cap on file size/length - veryfast/crf 20 just takes longer
+// for a bigger source. This IS capped on wall-clock time (see
+// CONVERT_TIMEOUT_MS below) so a genuinely stuck ffmpeg process (a
+// corrupted source, or a flaky network-share read) can't hang the
+// button on "Converting…" forever with zero feedback.
+const CONVERT_TIMEOUT_MS = 10 * 60 * 1000
+
 ipcMain.handle('convert:run', (_event, key, sourcePath) => {
   return new Promise((resolve, reject) => {
     fs.mkdirSync(CONVERTED_DIR, { recursive: true })
@@ -971,11 +978,29 @@ ipcMain.handle('convert:run', (_event, key, sourcePath) => {
     ])
 
     let stderrTail = ''
+    let settled = false
+
+    const timeout = setTimeout(() => {
+      if (settled) return
+      settled = true
+      ffmpeg.kill('SIGKILL')
+      fs.rmSync(tempPath, { force: true })
+      reject(new Error(`Conversion timed out after ${CONVERT_TIMEOUT_MS / 60000} minutes - the source may be corrupted or on a slow/unreachable network location.`))
+    }, CONVERT_TIMEOUT_MS)
+
     ffmpeg.stderr.on('data', (chunk) => {
       stderrTail = (stderrTail + chunk.toString()).slice(-2000)
     })
-    ffmpeg.on('error', (err) => reject(new Error(`Could not start the converter: ${err.message}`)))
+    ffmpeg.on('error', (err) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
+      reject(new Error(`Could not start the converter: ${err.message}`))
+    })
     ffmpeg.on('close', (code) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeout)
       if (code === 0) {
         // Renamed into place only on success - a failed/interrupted
         // conversion never leaves a half-written file at the real path
@@ -984,7 +1009,13 @@ ipcMain.handle('convert:run', (_event, key, sourcePath) => {
         resolve(outputPath)
       } else {
         fs.rmSync(tempPath, { force: true })
-        reject(new Error(`Conversion failed (exit code ${code}): ${stderrTail.split('\n').pop()}`))
+        // Last few non-empty lines, not just the very last one - ffmpeg's
+        // actual diagnostic ("Unsupported codec", "Invalid data found",
+        // etc.) is often a couple of lines before its final output,
+        // which was previously all that got shown.
+        const lastLines = stderrTail.split('\n').map((l) => l.trim()).filter(Boolean).slice(-5).join(' | ')
+        console.error(`[convert] ffmpeg failed (exit ${code}) for ${sourcePath}\n${stderrTail}`)
+        reject(new Error(`Conversion failed (exit code ${code}): ${lastLines || 'no ffmpeg output captured'}`))
       }
     })
   })
