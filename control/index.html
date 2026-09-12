@@ -165,6 +165,21 @@
     </div>
   </div>
 
+  <div id="edit-tags-modal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <h2>Tag this video</h2>
+      <p class="eyebrow">Doesn't move or rename the file - just tags it, so it groups with the artist's other videos in Playlists and in "Group: Artist" below.</p>
+      <label for="edit-tags-artist">Band / Singer</label>
+      <input id="edit-tags-artist" placeholder="e.g. A Flock of Seagulls" />
+      <label for="edit-tags-genre">Genre (optional)</label>
+      <input id="edit-tags-genre" placeholder="e.g. New Wave" />
+      <div class="button-row" style="justify-content:flex-end">
+        <button class="secondary" id="edit-tags-cancel">Cancel</button>
+        <button class="primary" id="edit-tags-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

@@ -474,6 +474,63 @@ function syncFolderPlaylists(files) {
   return playlists
 }
 
+// Auto-creates/syncs one playlist per artist tag actually present in the
+// metadata cache - Sam, 2026-09-13: "have a band/singer tab/playlist and
+// sort music videos by that ... not move the videos but tag them." Same
+// autoFolder pattern as syncFolderPlaylists just above, keyed on a
+// metadata tag instead of a real subfolder, so nothing on disk ever
+// moves for this one - membership is entirely virtual. Marked
+// `autoArtist: true` with the `artistValue` it came from, mirroring how
+// `autoFolder`/`folderPath` keep an auto-synced playlist from being
+// confused with, or clobbered by hand-editing, a manual one.
+//
+// Only a confident tag counts - same threshold sortUnsortedByDecade
+// already uses (library:sort-unsorted-by-decade below) - so a bare
+// filename-derived guess doesn't spawn a playlist nobody actually
+// confirmed; setting the artist manually (metadata:set-manual below)
+// always counts, since a human said so.
+function syncArtistPlaylists(files) {
+  const metadata = readJson(METADATA_PATH, {})
+  const byArtist = new Map()
+  for (const file of files) {
+    const meta = metadata[file.key]
+    const confident = meta && meta.artist && meta.artist !== 'Unknown' && (meta.confidence === 'high' || meta.confidence === 'manual')
+    if (!confident) continue
+    if (!byArtist.has(meta.artist)) byArtist.set(meta.artist, [])
+    byArtist.get(meta.artist).push(file.key)
+  }
+
+  let playlists = readJson(PLAYLISTS_PATH, [])
+  // An artist with no more confidently-tagged tracks left (the last one
+  // was re-tagged, deleted, or removed) loses its auto-playlist the same
+  // way an emptied/renamed folder does above.
+  playlists = playlists.filter((p) => !p.autoArtist || byArtist.has(p.artistValue))
+
+  for (const [artistValue, trackKeys] of byArtist) {
+    const existing = playlists.find((p) => p.autoArtist && p.artistValue === artistValue)
+    if (existing) {
+      existing.trackKeys = trackKeys
+    } else {
+      playlists.push({ id: crypto.randomUUID(), name: artistValue, autoArtist: true, artistValue, trackKeys })
+    }
+  }
+
+  writeJson(PLAYLISTS_PATH, playlists)
+  return playlists
+}
+
+// Both auto-playlist kinds read/filter/write the same playlists.json in
+// turn - safe to chain, since each only ever touches its own `autoFolder`/
+// `autoArtist` entries and passes every other entry (manual playlists,
+// the other auto-kind) through untouched. One helper so the three call
+// sites below don't each repeat the same "skip both when there are no
+// files at all" guard.
+function syncAllAutoPlaylists(files) {
+  if (!files.length) return readJson(PLAYLISTS_PATH, [])
+  syncFolderPlaylists(files)
+  return syncArtistPlaylists(files)
+}
+
 // Same idea as walkVideoFiles, for the ad slideshow's image folder - no
 // caching/conversion needed for a still image, so this just returns
 // paths, not the richer {size, mtimeMs, key} shape videos need.
@@ -683,7 +740,7 @@ ipcMain.handle('media-folder:list', () => {
   // network share down) must never be read as "everything's gone" and
   // wipe every folder-playlist along with the cache.
   const prunedCount = files.length > 0 ? pruneOrphanedCacheFiles(new Set(files.map((r) => r.key))) : 0
-  const playlists = files.length > 0 ? syncFolderPlaylists(files) : readJson(PLAYLISTS_PATH, [])
+  const playlists = syncAllAutoPlaylists(files)
   return { files, prunedCount, playlists }
 })
 
@@ -783,7 +840,7 @@ ipcMain.handle('library:sort-unsorted-by-decade', () => {
   // let the existing folder-playlist sync pick up the newly-created decade
   // folders exactly like any other folder a person made by hand.
   const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
-  const playlists = rescannedFiles.length > 0 ? syncFolderPlaylists(rescannedFiles) : readJson(PLAYLISTS_PATH, [])
+  const playlists = syncAllAutoPlaylists(rescannedFiles)
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
 
@@ -816,7 +873,7 @@ ipcMain.handle('library:move-file-to-folder', (_event, sourcePath, folderPath) =
   const newKey = moveFileTo(resolvedSource, stat.size, destDir)
 
   const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
-  const playlists = rescannedFiles.length > 0 ? syncFolderPlaylists(rescannedFiles) : readJson(PLAYLISTS_PATH, [])
+  const playlists = syncAllAutoPlaylists(rescannedFiles)
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
 
@@ -1143,11 +1200,20 @@ ipcMain.handle('metadata:lookup', async (_event, key, filename) => {
   }
 })
 
+// Resyncs artist playlists immediately rather than waiting for the next
+// rescan - tagging a track is the whole point of the feature this
+// serves (see syncArtistPlaylists above), so it needs to show up in
+// Playlists right away, not just "eventually."
 ipcMain.handle('metadata:set-manual', (_event, key, entry) => {
   const cache = readJson(METADATA_PATH, {})
   cache[key] = { ...entry, confidence: 'manual' }
   writeJson(METADATA_PATH, cache)
-  return cache[key]
+
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
+  const playlists = mediaFolder ? syncArtistPlaylists(walkVideoFiles(mediaFolder, mediaFolder)) : readJson(PLAYLISTS_PATH, [])
+
+  return { entry: cache[key], playlists }
 })
 
 // --- IPC: player command/state relay between the two windows ---

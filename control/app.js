@@ -6,6 +6,10 @@ let queue = { tracks: [], currentIndex: 0 }
 let settings = { mediaFolder: '', crossfadeSeconds: 3, volume: 1, adsEnabled: false, adsFolder: '', adsEverySongs: 4, adsSecondsPerImage: 6 }
 let searchQuery = ''
 let groupBy = ''
+// Which group (artist/genre/decade label) the Library grid is narrowed
+// to, when grouped - a quick "just show me this one" without leaving
+// the tab. Cleared whenever groupBy itself changes.
+let groupFilter = null
 
 // Serializes every flow that reconciles a fresh main-process file listing
 // into `library` (manual/auto rescan, delete, move-to-folder, decade-sort)
@@ -86,6 +90,48 @@ function askForFolderName() {
     createBtn.addEventListener('click', onCreate)
     cancelBtn.addEventListener('click', onCancel)
     input.addEventListener('keydown', onKeydown)
+  })
+}
+
+// Same modal-dialog approach as askForFolderName above (window.prompt()
+// isn't available at all in Electron) - pre-fills with whatever's
+// already tagged (auto-looked-up or previously manual) so correcting a
+// wrong guess doesn't mean retyping a right genre too. Resolves the
+// trimmed {artist, genre} (genre '' is fine, artist '' is not - the
+// Save button is disabled until something's typed) or null on Cancel.
+function askForTags(existingMeta) {
+  const modal = document.getElementById('edit-tags-modal')
+  const artistInput = document.getElementById('edit-tags-artist')
+  const genreInput = document.getElementById('edit-tags-genre')
+  artistInput.value = (existingMeta && existingMeta.artist !== 'Unknown' && existingMeta.artist) || ''
+  genreInput.value = (existingMeta && existingMeta.genre !== 'Unknown' && existingMeta.genre) || ''
+  modal.hidden = false
+  artistInput.focus()
+  return new Promise((resolve) => {
+    const saveBtn = document.getElementById('edit-tags-save')
+    const cancelBtn = document.getElementById('edit-tags-cancel')
+    function cleanup(value) {
+      modal.hidden = true
+      saveBtn.removeEventListener('click', onSave)
+      cancelBtn.removeEventListener('click', onCancel)
+      artistInput.removeEventListener('keydown', onKeydown)
+      genreInput.removeEventListener('keydown', onKeydown)
+      resolve(value)
+    }
+    function onSave() {
+      const artist = artistInput.value.trim()
+      if (!artist) { artistInput.focus(); return }
+      cleanup({ artist, genre: genreInput.value.trim() || 'Unknown' })
+    }
+    function onCancel() { cleanup(null) }
+    function onKeydown(e) {
+      if (e.key === 'Enter') onSave()
+      if (e.key === 'Escape') onCancel()
+    }
+    saveBtn.addEventListener('click', onSave)
+    cancelBtn.addEventListener('click', onCancel)
+    artistInput.addEventListener('keydown', onKeydown)
+    genreInput.addEventListener('keydown', onKeydown)
   })
 }
 
@@ -481,7 +527,7 @@ document.getElementById('sort-decade-btn').addEventListener('click', () => runLi
 }))
 
 document.getElementById('library-search').addEventListener('input', (e) => { searchQuery = e.target.value.toLowerCase(); renderLibrary() })
-document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; renderLibrary() })
+document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; groupFilter = null; renderLibrary() })
 
 // One picker, two different things happening underneath depending on
 // what's chosen - a manual playlist just gets the track key appended
@@ -491,15 +537,22 @@ document.getElementById('library-group-by').addEventListener('change', (e) => { 
 // "New folder…" option, which creates one on the spot. moveTrackToFolder
 // handles both of the folder cases; addTrackToPlaylist the manual one.
 function playlistPickerHtml(track) {
-  const manualOptions = playlists.filter((p) => !p.autoFolder)
+  const manualOptions = playlists.filter((p) => !p.autoFolder && !p.autoArtist)
     .map((p) => `<option value="playlist:${p.id}">${p.name}</option>`).join('')
   const folderOptions = playlists.filter((p) => p.autoFolder)
     .map((p) => `<option value="folder:${p.folderPath}">📁 ${p.name}</option>`).join('')
+  // "Joining" an existing artist playlist here is just a quicker way to
+  // tag this track as that same artist (setManualMetadata under the
+  // hood, same as the 🏷 Tag button) - no retyping a band name that's
+  // already on record for another video.
+  const artistOptions = playlists.filter((p) => p.autoArtist)
+    .map((p) => `<option value="artist:${p.artistValue}">🎤 ${p.name}</option>`).join('')
   return `
     <select data-track-picker="${track.key}">
       <option value="">+ Playlist</option>
       ${manualOptions}
       ${folderOptions}
+      ${artistOptions}
       <option value="new-folder">📁 New folder…</option>
     </select>`
 }
@@ -522,6 +575,7 @@ function renderTrackTile(track) {
       </div>
       <div class="track-actions">
         ${playlistPickerHtml(track)}
+        <button class="secondary" data-edit-tags="${track.key}" title="Tag the band/singer (and genre) - doesn't move or rename the file">🏷 Tag</button>
       </div>
       <div class="track-actions">
         <button class="danger" data-delete-file="${track.key}" title="Permanently delete this file from the drive">🗑 Delete</button>
@@ -541,8 +595,26 @@ function renderLibrary() {
       if (!groups.has(label)) groups.set(label, [])
       groups.get(label).push(track)
     }
-    const sortedLabels = [...groups.keys()].sort((a, b) => (a === 'Unknown' ? 1 : b === 'Unknown' ? -1 : a.localeCompare(b)))
-    grid.innerHTML = sortedLabels.map((label) => `<div class="library-group">${label}</div>` + groups.get(label).map(renderTrackTile).join('')).join('')
+    // A group that's disappeared since (its last track got re-tagged,
+    // deleted, or the search box now excludes it) can't stay "selected".
+    if (groupFilter && !groups.has(groupFilter)) groupFilter = null
+
+    if (groupFilter) {
+      grid.innerHTML =
+        `<button class="secondary" id="clear-group-filter-btn">← Show every ${groupBy}</button>` +
+        `<div class="library-group">${groupFilter}</div>` +
+        groups.get(groupFilter).map(renderTrackTile).join('')
+    } else {
+      const sortedLabels = [...groups.keys()].sort((a, b) => (a === 'Unknown' ? 1 : b === 'Unknown' ? -1 : a.localeCompare(b)))
+      // Clicking a group header narrows the grid to just that group - the
+      // whole point of tagging a video (Sam, 2026-09-13: "sort the music
+      // videos by that") is being able to jump straight to one band's
+      // videos, not just see them clustered on an otherwise-long page.
+      grid.innerHTML = sortedLabels.map((label) =>
+        `<div class="library-group" data-group-filter="${label}" title="Show only ${label}">${label} <span class="group-count">${groups.get(label).length}</span></div>` +
+        groups.get(label).map(renderTrackTile).join('')
+      ).join('')
+    }
   } else {
     items = [...items].sort((a, b) => a.filename.localeCompare(b.filename))
     grid.innerHTML = items.map(renderTrackTile).join('')
@@ -557,6 +629,7 @@ function renderLibrary() {
     if (!value) return
     if (value.startsWith('playlist:')) addTrackToPlaylist(value.slice('playlist:'.length), trackKey)
     else if (value.startsWith('folder:')) runLibraryOp(() => moveTrackToFolder(trackKey, value.slice('folder:'.length)))
+    else if (value.startsWith('artist:')) assignArtist(trackKey, value.slice('artist:'.length))
     else if (value === 'new-folder') {
       const name = await askForFolderName()
       if (name) runLibraryOp(() => moveTrackToFolder(trackKey, name))
@@ -564,6 +637,10 @@ function renderLibrary() {
   }))
   grid.querySelectorAll('[data-convert]').forEach((el) => el.addEventListener('click', () => convertTrack(el.dataset.convert)))
   grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => runLibraryOp(() => deleteFile(el.dataset.deleteFile))))
+  grid.querySelectorAll('[data-edit-tags]').forEach((el) => el.addEventListener('click', () => editTags(el.dataset.editTags)))
+  grid.querySelectorAll('[data-group-filter]').forEach((el) => el.addEventListener('click', () => { groupFilter = el.dataset.groupFilter; renderLibrary() }))
+  const clearGroupFilterBtn = document.getElementById('clear-group-filter-btn')
+  if (clearGroupFilterBtn) clearGroupFilterBtn.addEventListener('click', () => { groupFilter = null; renderLibrary() })
 }
 
 // Shared by both deleteFile (manual) and convertTrack's auto-remove
@@ -601,6 +678,47 @@ async function deleteFile(key) {
   } catch (err) {
     document.getElementById('library-status').textContent = `Could not delete "${track.filename}": ${err.message}`
   }
+}
+
+// Tags a track's band/singer (and optionally genre) without moving or
+// renaming the file - Sam, 2026-09-13: "have a band/singer tab/playlist
+// and sort music videos by that ... not move the videos but tag them."
+// A confident tag (this always counts as one, being manual) immediately
+// gets its own auto-synced playlist in Playlists (see syncArtistPlaylists
+// in main.js) - main returns the freshly-resynced list so it shows up
+// there right away, not just after the next rescan.
+async function editTags(key) {
+  const track = trackByKey(key)
+  if (!track) return
+  const tags = await askForTags(metadataCache[key])
+  if (!tags) return
+  const decade = (metadataCache[key] && metadataCache[key].decade) || 'Unknown'
+  const result = await jukebox.setManualMetadata(key, { artist: tags.artist, genre: tags.genre, decade })
+  metadataCache[key] = result.entry
+  playlists = result.playlists
+  document.getElementById('library-status').textContent = `Tagged "${track.filename}" as ${tags.artist}.`
+  renderLibrary()
+  renderPlaylists()
+}
+
+// "Joining" an existing artist playlist straight from the picker
+// (playlistPickerHtml above) - same tagging call as editTags, just with
+// the artist already known so there's nothing to type. Genre/decade
+// carry over unchanged if this track already had any.
+async function assignArtist(key, artistValue) {
+  const track = trackByKey(key)
+  if (!track) return
+  const existing = metadataCache[key]
+  const result = await jukebox.setManualMetadata(key, {
+    artist: artistValue,
+    genre: (existing && existing.genre) || 'Unknown',
+    decade: (existing && existing.decade) || 'Unknown',
+  })
+  metadataCache[key] = result.entry
+  playlists = result.playlists
+  document.getElementById('library-status').textContent = `Tagged "${track.filename}" as ${artistValue}.`
+  renderLibrary()
+  renderPlaylists()
 }
 
 // Moves one file into an existing folder-playlist's folder, or a brand
@@ -898,27 +1016,29 @@ function renderPlaylists() {
 
   if (openPlaylist) {
     const p = openPlaylist
+    const isAuto = p.autoFolder || p.autoArtist
+    const autoLabel = p.autoFolder ? '📁 synced from folder' : p.autoArtist ? '🎤 synced from tag' : ''
     container.className = 'playlist-detail'
     container.innerHTML = `
       <button class="secondary" id="playlist-back-btn">← Back to Playlists</button>
       <div class="playlist-card">
         <div class="playlist-header">
-          <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁 synced from folder</span>' : ''}</strong>
+          <strong>${p.name}${autoLabel ? ` <span class="auto-tag">${autoLabel}</span>` : ''}</strong>
           <div class="button-row">
             <button class="primary" data-playlist-play="${p.id}">▶ Play Now</button>
             <button class="secondary" data-playlist-append="${p.id}">+ Add to Queue</button>
-            ${p.autoFolder ? '' : `<button class="danger" data-playlist-delete="${p.id}">Delete</button>`}
+            ${isAuto ? '' : `<button class="danger" data-playlist-delete="${p.id}">Delete</button>`}
           </div>
         </div>
         <div class="playlist-tracks">
           ${p.trackKeys.map((key) => {
             const t = trackByKey(key)
             if (!t) return ''
-            // Membership on a folder-synced playlist is recalculated from
-            // disk on every rescan - no manual remove button, since moving
-            // the file out of the folder is the actual "remove" action.
-            return `<div class="playlist-track-row"><span>${t.filename}</span>${p.autoFolder ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
-          }).join('') || `<p class="eyebrow">${p.autoFolder ? 'No files currently in this folder.' : 'No tracks yet - add some from the Library.'}</p>`}
+            // Membership on an auto-synced playlist (folder or artist tag)
+            // is recalculated on its own - no manual remove button, since
+            // moving the file (or re-tagging it) is the actual "remove".
+            return `<div class="playlist-track-row"><span>${t.filename}</span>${isAuto ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
+          }).join('') || `<p class="eyebrow">${p.autoFolder ? 'No files currently in this folder.' : p.autoArtist ? 'No tracks tagged with this artist yet.' : 'No tracks yet - add some from the Library.'}</p>`}
         </div>
       </div>`
     document.getElementById('playlist-back-btn').addEventListener('click', () => { openPlaylistId = null; renderPlaylists() })
@@ -929,7 +1049,7 @@ function renderPlaylists() {
   container.className = 'playlist-tiles'
   container.innerHTML = playlists.map((p) => `
     <div class="playlist-tile" data-open-playlist="${p.id}">
-      <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁</span>' : ''}</strong>
+      <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁</span>' : p.autoArtist ? ' <span class="auto-tag">🎤</span>' : ''}</strong>
       <div class="track-meta">${p.trackKeys.length} track${p.trackKeys.length === 1 ? '' : 's'}</div>
       <div class="track-actions">
         <button class="primary" data-playlist-play="${p.id}">▶ Play</button>
