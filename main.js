@@ -135,7 +135,10 @@ function callJukeboxAdsFn(body) {
 async function syncWebAds() {
   let files
   try {
-    const data = await callJukeboxAdsFn({ action: 'list' })
+    // 'jukebox' scopes this to ads the shared Ad Manager has actually
+    // targeted at this app - without it, an ad meant only for the Bar
+    // Menu board would still get downloaded and played here too.
+    const data = await callJukeboxAdsFn({ action: 'list', target: 'jukebox' })
     if (!data.ok) throw new Error(data.error || 'Could not list web ads.')
     files = data.files
   } catch (err) {
@@ -917,7 +920,7 @@ ipcMain.handle('bar-session-ads:sync-now', () => syncBarSessionAds())
 // source of truth rather than whatever this app last happened to
 // download, so a very recent upload/delete from elsewhere shows up here
 // immediately rather than waiting for the next sync pass.
-ipcMain.handle('web-ads:list-remote', () => callJukeboxAdsFn({ action: 'list' }))
+ipcMain.handle('web-ads:list-remote', () => callJukeboxAdsFn({ action: 'list', target: 'jukebox' }))
 
 ipcMain.handle('web-ads:delete-remote', async (_event, passphrase, remotePath) => {
   const data = await callJukeboxAdsFn({ action: 'delete', passphrase, path: remotePath })
