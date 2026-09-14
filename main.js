@@ -71,20 +71,16 @@ const DEFAULT_SETTINGS = {
   adsFolder: '',
   adsEverySongs: 4,
   adsSecondsPerImage: 6,
-  // Only needed to delete a web-uploaded ad from this app's own Settings
-  // (rather than from the upload page itself) - typed once, remembered
-  // here same as any other setting. Never sent anywhere except the
-  // jukebox-ads function's own delete action.
-  adUploadPassphrase: '',
 }
 
-// The standalone web page (separate repo: mslsc-jukebox-ad-upload) and
-// the Supabase Edge Function backing it - lets anyone with the shared
-// passphrase add or remove an ad image from anywhere, which this app
-// then syncs down on its own. Same shared Supabase project every other
-// MSLSC app already uses; these are public/anon-level values (an anon
-// key + a well-known function URL), not secrets.
-const JUKEBOX_AD_UPLOAD_PAGE = 'https://midwaysurfjukeboxads.vercel.app'
+// The standalone Ad Manager (separate repo: mslsc-jukebox-ad-upload,
+// live at midwaysurfjukeboxads.vercel.app) and the Supabase Edge
+// Function backing it - this app only ever reads from it (syncWebAds
+// below); uploading, editing, and deleting ads is entirely that
+// system's own job now (its own PIN-gated admin area), not something
+// this app's Settings manages or links to. Same shared Supabase
+// project every other MSLSC app already uses; these are public/anon-
+// level values (an anon key + a well-known function URL), not secrets.
 const JUKEBOX_ADS_FN_URL = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/jukebox-ads'
 const JUKEBOX_ADS_ANON_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj'
 const WEB_ADS_SYNC_INTERVAL_MS = 2 * 60 * 1000
@@ -678,34 +674,13 @@ ipcMain.handle('ads-folder:list', () => {
 })
 
 // --- Web-uploaded ads (see syncWebAds above) ---
-
-ipcMain.handle('web-ads:get-upload-url', () => JUKEBOX_AD_UPLOAD_PAGE)
+//
+// Uploading, editing, and deleting an ad is entirely the Ad Manager's
+// own job (its own PIN-gated admin area) - this app only ever reads
+// from it via syncWebAds, so there's no upload/manage IPC surface here
+// any more, just the ability to force an immediate re-check.
 
 ipcMain.handle('web-ads:sync', () => syncWebAds())
-
-// Separate from the sync above (which just reconciles the local cache) -
-// this is what Settings' own managed list renders, straight from the
-// source of truth rather than whatever this app last happened to
-// download, so a very recent upload/delete from elsewhere shows up here
-// immediately rather than waiting for the next sync pass.
-ipcMain.handle('web-ads:list-remote', () => callJukeboxAdsFn({ action: 'list', target: 'jukebox' }))
-
-ipcMain.handle('web-ads:delete-remote', async (_event, passphrase, remotePath) => {
-  const data = await callJukeboxAdsFn({ action: 'delete', passphrase, path: remotePath })
-  // Removes the local cached copy immediately on success, and tells
-  // Display right away - both rather than waiting for the next scheduled
-  // sync pass to notice it's gone, since the whole point of deleting it
-  // here is for it to stop showing up now, not up to
-  // WEB_ADS_SYNC_INTERVAL_MS later.
-  if (data.ok) {
-    try { fs.rmSync(path.join(WEB_ADS_DIR, remotePath), { force: true }) } catch { /* next sync will catch it either way */ }
-    if (displayWindow) {
-      const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
-      displayWindow.webContents.send('settings:updated', settings)
-    }
-  }
-  return data
-})
 
 ipcMain.handle('playlists:get-all', () => readJson(PLAYLISTS_PATH, []))
 ipcMain.handle('playlists:save', (_event, playlist) => {
@@ -1128,7 +1103,6 @@ ipcMain.handle('app:get-version', () => app.getVersion())
 function startSyncingWebAds() {
   const runSync = async () => {
     const result = await syncWebAds()
-    if (controlWindow) controlWindow.webContents.send('web-ads:synced', result)
     if (result.ok && (result.downloaded > 0 || result.removed > 0) && displayWindow) {
       const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
       displayWindow.webContents.send('settings:updated', settings)
