@@ -71,7 +71,16 @@ const DEFAULT_SETTINGS = {
   adsFolder: '',
   adsEverySongs: 4,
   adsSecondsPerImage: 6,
+  // Short muted bumper clip, played once after each song ends (and after
+  // any ad break) before the next video starts - on by default since the
+  // bundled clip needs no extra setup to work. See INTRO_VIDEO_PATH below.
+  introVideoEnabled: true,
 }
+
+// Bundled with the app (assets/**/* is included in electron-builder's
+// `files`), not user-configurable like adsFolder - there's exactly one
+// intro clip, shipped with the install, so there's nothing to pick.
+const INTRO_VIDEO_PATH = path.join(__dirname, 'assets', 'intro-video.mp4')
 
 // The standalone Ad Manager (separate repo: mslsc-jukebox-ad-upload,
 // live at midwaysurfjukeboxads.vercel.app) and the Supabase Edge
@@ -654,6 +663,8 @@ ipcMain.handle('library:move-file-to-folder', (_event, sourcePath, folderPath) =
 
   return { newKey, files: rescannedFiles, playlists, queue, prunedCount }
 })
+
+ipcMain.handle('intro-video:get-path', () => (fs.existsSync(INTRO_VIDEO_PATH) ? INTRO_VIDEO_PATH : null))
 
 ipcMain.handle('ads-folder:choose', async () => {
   const result = await dialog.showOpenDialog(controlWindow, { properties: ['openDirectory'] })

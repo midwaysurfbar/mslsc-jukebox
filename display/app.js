@@ -6,9 +6,11 @@
 
 const deckA = document.getElementById('deckA')
 const deckB = document.getElementById('deckB')
+const introDeck = document.getElementById('introDeck')
 const idleOverlay = document.getElementById('idle')
 const adOverlay = document.getElementById('adOverlay')
 const adImageEl = document.getElementById('adImage')
+introDeck.muted = true
 
 let queue = []
 let currentIndex = -1
@@ -34,6 +36,17 @@ let adsEverySongs = 4
 let adsSecondsPerImage = 6
 let adImages = []
 let songsPlayedSinceAd = 0
+
+// Short muted bumper clip, played once after a song ends (and after any
+// ad break showing on top of it) before the next video starts. Unlike
+// the ad overlay, this genuinely takes over the stage for its own few
+// seconds - see playIntroThenNext below - so it's only ever started at a
+// song's true end (onEnded), never mid-crossfade. When switched off, ad
+// breaks are completely unaffected - the normal crossfade-and-overlay
+// flow further down just runs exactly as it always has.
+let introVideoEnabled = false
+let introVideoPath = null
+let introTransitionNoted = false
 
 function adBreakDue() {
   return adsEnabled && adImages.length > 0 && songsPlayedSinceAd >= adsEverySongs
@@ -98,6 +111,54 @@ async function playAdBreak() {
   adOverlay.classList.remove('active')
   adImageEl.removeAttribute('src')
   adBreakInProgress = false
+}
+
+// Plays the bumper clip once, full screen, muted, on its own layer above
+// everything else (see .intro-deck's z-index). Resolves once it's done -
+// on 'ended', on 'error' (a bad/missing file shouldn't ever block the
+// queue), or after a hard 15s cap in case neither event fires for some
+// reason. Never rejects, so callers don't need their own catch.
+function playIntroClip() {
+  return new Promise((resolve) => {
+    let done = false
+    function finish() {
+      if (done) return
+      done = true
+      introDeck.removeEventListener('ended', finish)
+      introDeck.removeEventListener('error', finish)
+      clearTimeout(safety)
+      introDeck.classList.remove('active')
+      introDeck.pause()
+      introDeck.removeAttribute('src')
+      resolve()
+    }
+    const safety = setTimeout(finish, 15000)
+    introDeck.addEventListener('ended', finish, { once: true })
+    introDeck.addEventListener('error', finish, { once: true })
+    introDeck.muted = true
+    introDeck.volume = 0
+    introDeck.src = fileUrl(introVideoPath)
+    introDeck.currentTime = 0
+    introDeck.classList.add('active')
+    introDeck.play().catch(finish)
+  })
+}
+
+// Called once a song has genuinely finished (never mid-crossfade - see
+// onEnded below). Blacks out the stage, plays the bumper if there's
+// somewhere to land afterwards, then hands off to the real next track
+// exactly like a plain playIndex call (same hard-cut style already used
+// for the previous/skip/error-retry cases elsewhere in this file).
+async function playIntroThenNext() {
+  isTransitioning = true
+  const nextIndex = currentIndex + 1
+  activeDeck.pause()
+  activeDeck.classList.remove('active')
+  if (introVideoPath && nextIndex < queue.length) {
+    await playIntroClip()
+  }
+  isTransitioning = false
+  playIndex(nextIndex)
 }
 
 function otherDeck(deck) {
@@ -214,6 +275,7 @@ async function playIndex(index) {
   activeDeck.play()
   isPlaying = true
   isTransitioning = false
+  introTransitionNoted = false
   reportState({ status: 'playing' })
 }
 
@@ -266,16 +328,30 @@ async function beginCrossfade() {
 }
 
 function onTimeUpdate() {
-  if (!isTransitioning && activeDeck.duration && activeDeck.duration - activeDeck.currentTime <= crossfadeSeconds) {
+  if (isTransitioning || !activeDeck.duration || activeDeck.duration - activeDeck.currentTime > crossfadeSeconds) return
+  if (introVideoEnabled) {
+    // No early crossfade in this mode - the outgoing track plays out to
+    // its natural end (onEnded, below) instead. This just fires the same
+    // ad-break decision at the same lead time a crossfade would have,
+    // so an ad can still be showing over the tail of the video ("music
+    // still played") exactly as it would without the intro feature on.
+    if (currentIndex + 1 >= queue.length) return // nothing after this track - let it just end naturally
+    if (!introTransitionNoted) { introTransitionNoted = true; noteSongTransition() }
+  } else {
     beginCrossfade()
   }
 }
 
 function onEnded() {
+  if (isTransitioning) return
+  if (introVideoEnabled) {
+    if (!introTransitionNoted) { introTransitionNoted = true; noteSongTransition() }
+    playIntroThenNext()
+    return
+  }
   // Fallback for a clip shorter than the crossfade window, or the last
   // track in the queue - crossfade logic above should normally have
   // already handled the swap before this ever fires.
-  if (isTransitioning) return
   noteSongTransition()
   playIndex(currentIndex + 1)
 }
@@ -322,6 +398,7 @@ jukebox.onSettingsUpdated((settings) => {
   adsEverySongs = settings.adsEverySongs
   adsSecondsPerImage = settings.adsSecondsPerImage
   refreshAdImages()
+  introVideoEnabled = Boolean(settings.introVideoEnabled)
 })
 
 jukebox.getSettings().then((settings) => {
@@ -332,4 +409,10 @@ jukebox.getSettings().then((settings) => {
   adsEverySongs = settings.adsEverySongs
   adsSecondsPerImage = settings.adsSecondsPerImage
   refreshAdImages()
+  introVideoEnabled = Boolean(settings.introVideoEnabled)
 })
+
+// The bundled clip's path never changes at runtime (it's not a user-
+// picked folder like adsFolder) - just fetched once at startup, not
+// re-fetched on every settings update.
+jukebox.getIntroVideoPath().then((filePath) => { introVideoPath = filePath })
