@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('jukebox', {
   playerTogglePlayPause: () => ipcRenderer.send('player:toggle-play-pause'),
   playerSkip: () => ipcRenderer.send('player:skip'),
   playerPrevious: () => ipcRenderer.send('player:previous'),
+  playerSeek: (seconds) => ipcRenderer.send('player:seek', seconds),
   playerSetCrossfadeDuration: (seconds) => ipcRenderer.send('player:set-crossfade-duration', seconds),
   playerSetVolume: (volume) => ipcRenderer.send('player:set-volume', volume),
 

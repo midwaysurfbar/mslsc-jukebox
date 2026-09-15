@@ -74,10 +74,15 @@ async function refreshAdImages() {
   }
 }
 
-// Shows one image for adsSecondsPerImage - a skipped/broken image just
-// moves on immediately rather than sitting on a blank frame for the
-// full duration. Runs entirely independently of playback - never
-// awaited by anything that advances the queue.
+// Shows one image for its own duration/size if the Ad Manager set one
+// (a web-synced ad carries `seconds`/`sizePct`, attached in main.js's
+// ads-folder:list) - otherwise this app's own adsSecondsPerImage
+// setting and full size, exactly as before per-ad settings existed
+// (covers a file added through the person's own local adsFolder, which
+// was never part of the Ad Manager and so never carries either). A
+// skipped/broken image just moves on immediately rather than sitting on
+// a blank frame for the full duration. Runs entirely independently of
+// playback - never awaited by anything that advances the queue.
 function showAdImage(image) {
   return new Promise((resolve) => {
     let done = false
@@ -87,9 +92,13 @@ function showAdImage(image) {
       adImageEl.removeEventListener('error', finish)
       resolve()
     }
+    const seconds = image.seconds || adsSecondsPerImage
+    const sizePct = image.sizePct || 100
+    adImageEl.style.width = `${sizePct}%`
+    adImageEl.style.height = `${sizePct}%`
     adImageEl.addEventListener('error', finish, { once: true })
     adImageEl.src = fileUrl(image.path)
-    setTimeout(finish, adsSecondsPerImage * 1000)
+    setTimeout(finish, seconds * 1000)
   })
 }
 
@@ -430,6 +439,16 @@ jukebox.onPrevious(() => {
   if (isTransitioning) return
   if (activeDeck.currentTime > 3) activeDeck.currentTime = 0
   else playIndex(Math.max(0, currentIndex - 1))
+})
+// Ignored mid-crossfade/bumper (isTransitioning) - same guard as Skip/
+// Previous above, since there's no single well-defined "current track"
+// to jump around in during that window. Clamped defensively even though
+// Control's own slider is already 0-duration - a stale duration from
+// just before a track change could otherwise send a target past the
+// new track's own (possibly shorter) length.
+jukebox.onSeek((seconds) => {
+  if (isTransitioning || !activeDeck.duration) return
+  activeDeck.currentTime = Math.max(0, Math.min(seconds, activeDeck.duration))
 })
 jukebox.onSetCrossfadeDuration((seconds) => { crossfadeSeconds = seconds; setDeckTransitionDuration(seconds) })
 jukebox.onSetVolume((v) => { volume = v; if (!isTransitioning) activeDeck.volume = v })

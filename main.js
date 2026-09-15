@@ -60,6 +60,14 @@ const CONVERTED_DIR = path.join(USER_DATA, 'converted')
 // combined ad-slideshow list is just the two folders' contents added
 // together (see ads-folder:list).
 const WEB_ADS_DIR = path.join(USER_DATA, 'web-ads')
+// Per-ad display settings (how long it shows, how large) set in the Ad
+// Manager's own admin page - keyed on the same filename WEB_ADS_DIR
+// downloads it under, so ads-folder:list (below) can attach the right
+// settings to the right file. Only ever covers web-synced ads; a file
+// added through the person's own local adsFolder has no entry here and
+// falls back to this app's own adsSecondsPerImage setting + full size,
+// exactly as before this feature existed.
+const WEB_ADS_METADATA_PATH = path.join(USER_DATA, 'web-ads-metadata.json')
 
 const DEFAULT_SETTINGS = {
   mediaFolder: '',
@@ -148,6 +156,15 @@ async function syncWebAds() {
       try { fs.rmSync(path.join(WEB_ADS_DIR, localName), { force: true }); removed += 1 } catch { /* best effort */ }
     }
   }
+
+  // Refreshed on every pass regardless of downloaded/removed - an ad's
+  // own duration/size can be edited in the Ad Manager without the file
+  // itself changing at all, and that has no other signal to catch here.
+  const metadata = {}
+  for (const file of files) {
+    metadata[file.path] = { seconds: file.jukeboxSeconds, sizePct: file.jukeboxSizePct }
+  }
+  writeJson(WEB_ADS_METADATA_PATH, metadata)
 
   return { ok: true, downloaded, removed, total: files.length }
 }
@@ -681,7 +698,14 @@ ipcMain.handle('ads-folder:list', () => {
   const files = []
   if (settings.adsFolder) files.push(...walkImageFiles(settings.adsFolder))
   if (fs.existsSync(WEB_ADS_DIR)) files.push(...walkImageFiles(WEB_ADS_DIR))
-  return { files }
+  // Attaches each web-synced ad's own display seconds/size, set in the
+  // Ad Manager - keyed on filename, so a file in the person's own local
+  // adsFolder (never in this map) is left with neither, and Display
+  // falls back to this app's own adsSecondsPerImage setting + full size
+  // for those, exactly as before this feature existed.
+  const metadata = readJson(WEB_ADS_METADATA_PATH, {})
+  const withMeta = files.map((f) => ({ ...f, ...metadata[f.filename] }))
+  return { files: withMeta }
 })
 
 // --- Web-uploaded ads (see syncWebAds above) ---
@@ -975,7 +999,7 @@ ipcMain.handle('metadata:set-manual', (_event, key, entry) => {
 
 // --- IPC: player command/state relay between the two windows ---
 
-const PLAYER_COMMANDS = ['load-queue', 'update-queue', 'play', 'pause', 'toggle-play-pause', 'skip', 'previous', 'set-crossfade-duration', 'set-volume']
+const PLAYER_COMMANDS = ['load-queue', 'update-queue', 'play', 'pause', 'toggle-play-pause', 'skip', 'previous', 'seek', 'set-crossfade-duration', 'set-volume']
 for (const command of PLAYER_COMMANDS) {
   ipcMain.on(`player:${command}`, (_event, payload) => {
     if (displayWindow) displayWindow.webContents.send(`player:${command}`, payload)

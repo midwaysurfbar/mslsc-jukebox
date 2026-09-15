@@ -21,10 +21,17 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; curs
   pointer-events: none;
   transition: opacity 0.6s ease;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .ad-overlay.active { opacity: 1; }
 .ad-overlay img {
-  width: 100%; height: 100%;
+  /* width/height are set inline per-image (see showAdImage in app.js) -
+     a per-ad size from the Ad Manager, or 100% (this whole overlay) for
+     one with no such setting - object-fit keeps it undistorted either
+     way, and the flex centering above keeps a shrunk one centered
+     rather than pinned to a corner. */
   object-fit: contain;
 }
 .idle {

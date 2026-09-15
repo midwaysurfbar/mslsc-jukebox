@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('jukebox', {
   onTogglePlayPause: (callback) => ipcRenderer.on('player:toggle-play-pause', () => callback()),
   onSkip: (callback) => ipcRenderer.on('player:skip', () => callback()),
   onPrevious: (callback) => ipcRenderer.on('player:previous', () => callback()),
+  onSeek: (callback) => ipcRenderer.on('player:seek', (_event, seconds) => callback(seconds)),
   onSetCrossfadeDuration: (callback) => ipcRenderer.on('player:set-crossfade-duration', (_event, seconds) => callback(seconds)),
   onSetVolume: (callback) => ipcRenderer.on('player:set-volume', (_event, volume) => callback(volume)),
 
