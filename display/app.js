@@ -127,9 +127,16 @@ function playIntroClip() {
       introDeck.removeEventListener('ended', finish)
       introDeck.removeEventListener('error', finish)
       clearTimeout(safety)
-      introDeck.classList.remove('active')
-      introDeck.pause()
-      introDeck.removeAttribute('src')
+      // Deliberately NOT hiding/clearing introDeck here - once 'ended'
+      // fires it just sits frozen on its own last frame, still fully
+      // covering the stage, until the real next track is actually loaded
+      // and showing underneath (see the cleanup in playIntroThenNext,
+      // right after playIndex resolves). Tearing it down immediately
+      // here used to leave a gap - loadDeck has to wait for 'canplay',
+      // which is never instant - where whatever's behind it could flash
+      // through: most visibly a still-finishing ad image, since its own
+      // display timer runs independently and isn't guaranteed to have
+      // finished by the moment the bumper itself ends.
       resolve()
     }
     const safety = setTimeout(finish, 15000)
@@ -158,7 +165,13 @@ async function playIntroThenNext() {
     await playIntroClip()
   }
   isTransitioning = false
-  playIndex(nextIndex)
+  await playIndex(nextIndex)
+  // The real next track is now loaded and active underneath - safe to
+  // reveal it by hiding the bumper. Harmless no-op if it was never shown
+  // this time around (last track in the queue, or no clip configured).
+  introDeck.classList.remove('active')
+  introDeck.pause()
+  introDeck.removeAttribute('src')
 }
 
 function otherDeck(deck) {
@@ -375,11 +388,41 @@ jukebox.onLoadQueue(({ tracks, startIndex }) => {
 // object (Control only ever reorders what's ahead of it), so this never
 // needs to touch the deck.
 jukebox.onUpdateQueue((tracks) => { queue = tracks || [] })
-jukebox.onPlay(() => { if (currentTrack()) { activeDeck.play(); isPlaying = true; reportState() } })
-jukebox.onPause(() => { activeDeck.pause(); if (isTransitioning) idleDeck.pause(); isPlaying = false; reportState() })
+// Play/pause need to act on whatever's actually visible right now, not
+// always activeDeck - for the few seconds the bumper is on screen (see
+// playIntroThenNext), activeDeck itself is already paused/hidden and
+// pausing it does nothing a viewer would ever notice, which is exactly
+// what made Pause look broken during the bumper before this check existed.
+function introDeckShowing() {
+  return introDeck.classList.contains('active')
+}
+
+jukebox.onPlay(() => {
+  if (introDeckShowing()) introDeck.play()
+  else if (currentTrack()) activeDeck.play()
+  else return
+  isPlaying = true
+  reportState()
+})
+jukebox.onPause(() => {
+  activeDeck.pause()
+  if (isTransitioning) idleDeck.pause()
+  if (introDeckShowing()) introDeck.pause()
+  isPlaying = false
+  reportState()
+})
 jukebox.onTogglePlayPause(() => {
-  if (!currentTrack()) return
-  if (isPlaying) { activeDeck.pause(); isPlaying = false } else { activeDeck.play(); isPlaying = true }
+  const introShowing = introDeckShowing()
+  if (!introShowing && !currentTrack()) return
+  if (isPlaying) {
+    activeDeck.pause()
+    if (introShowing) introDeck.pause()
+    isPlaying = false
+  } else {
+    if (introShowing) introDeck.play()
+    else activeDeck.play()
+    isPlaying = true
+  }
   reportState()
 })
 jukebox.onSkip(() => { if (!isTransitioning) playIndex(currentIndex + 1) })
