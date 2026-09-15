@@ -74,15 +74,13 @@ async function refreshAdImages() {
   }
 }
 
-// Shows one image for its own duration/size if the Ad Manager set one
-// (a web-synced ad carries `seconds`/`sizePct`, attached in main.js's
-// ads-folder:list) - otherwise this app's own adsSecondsPerImage
-// setting and full size, exactly as before per-ad settings existed
-// (covers a file added through the person's own local adsFolder, which
-// was never part of the Ad Manager and so never carries either). A
-// skipped/broken image just moves on immediately rather than sitting on
-// a blank frame for the full duration. Runs entirely independently of
-// playback - never awaited by anything that advances the queue.
+// Shows one image for its own duration/size, set in the Ad Manager (see
+// `seconds`/`sizePct`, attached in main.js's ads-folder:list) - falls
+// back to this app's own adsSecondsPerImage setting and full size for
+// the rare ad predating that feature. A skipped/broken image just moves
+// on immediately rather than sitting on a blank frame for the full
+// duration. Runs entirely independently of playback - never awaited by
+// anything that advances the queue.
 function showAdImage(image) {
   return new Promise((resolve) => {
     let done = false
@@ -474,7 +472,6 @@ jukebox.getSettings().then((settings) => {
   introVideoEnabled = Boolean(settings.introVideoEnabled)
 })
 
-// The bundled clip's path never changes at runtime (it's not a user-
-// picked folder like adsFolder) - just fetched once at startup, not
-// re-fetched on every settings update.
+// The bundled clip's path never changes at runtime - just fetched once
+// at startup, not re-fetched on every settings update.
 jukebox.getIntroVideoPath().then((filePath) => { introVideoPath = filePath })

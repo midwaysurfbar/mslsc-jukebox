@@ -3,7 +3,7 @@ let library = []            // [{path, filename, size, mtimeMs, key, duration, t
 let metadataCache = {}      // key -> {artist, genre, decade, confidence}
 let playlists = []          // [{id, name, trackKeys: []}]
 let queue = { tracks: [], currentIndex: 0 }
-let settings = { mediaFolder: '', crossfadeSeconds: 3, volume: 1, adsEnabled: false, adsFolder: '', adsEverySongs: 4, adsSecondsPerImage: 6, introVideoEnabled: true }
+let settings = { mediaFolder: '', crossfadeSeconds: 3, volume: 1, adsEnabled: false, adsEverySongs: 4, adsSecondsPerImage: 6, introVideoEnabled: true }
 let searchQuery = ''
 let groupBy = ''
 // Which group (artist/genre/decade label) the Library grid is narrowed
@@ -160,7 +160,6 @@ async function loadSettings() {
     : 'No media folder set — go to Settings.'
 
   document.getElementById('ads-enabled-toggle').checked = Boolean(settings.adsEnabled)
-  document.getElementById('ads-folder').value = settings.adsFolder || ''
   document.getElementById('ads-every-slider').value = settings.adsEverySongs
   document.getElementById('ads-every-value').textContent = settings.adsEverySongs
   document.getElementById('ads-every-plural').textContent = settings.adsEverySongs === 1 ? '' : 's'
@@ -178,10 +177,6 @@ document.getElementById('choose-folder-btn').addEventListener('click', async () 
 document.getElementById('ads-enabled-toggle').addEventListener('change', async (e) => {
   settings.adsEnabled = e.target.checked
   await jukebox.saveSettings(settings)
-})
-document.getElementById('choose-ads-folder-btn').addEventListener('click', async () => {
-  const folder = await jukebox.chooseAdsFolder()
-  if (folder) await loadSettings()
 })
 document.getElementById('ads-every-slider').addEventListener('input', async (e) => {
   const n = Number(e.target.value)

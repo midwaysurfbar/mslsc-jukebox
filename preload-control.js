@@ -6,7 +6,6 @@ contextBridge.exposeInMainWorld('jukebox', {
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   chooseMediaFolder: () => ipcRenderer.invoke('media-folder:choose'),
   listVideos: () => ipcRenderer.invoke('media-folder:list'),
-  chooseAdsFolder: () => ipcRenderer.invoke('ads-folder:choose'),
   listAdImages: () => ipcRenderer.invoke('ads-folder:list'),
 
   // Playlists

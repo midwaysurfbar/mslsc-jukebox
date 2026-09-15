@@ -54,29 +54,27 @@ const QUEUE_PATH = path.join(USER_DATA, 'queue.json')
 const METADATA_PATH = path.join(USER_DATA, 'metadata.json')
 const THUMBNAILS_DIR = path.join(USER_DATA, 'thumbnails')
 const CONVERTED_DIR = path.join(USER_DATA, 'converted')
-// Local cache of ads synced down from the web uploader (see
-// syncWebAds below) - kept entirely separate from adsFolder (the
-// person's own manually-picked local folder) so both can coexist; the
-// combined ad-slideshow list is just the two folders' contents added
-// together (see ads-folder:list).
+// Local cache of ads synced down from the Ad Manager (see syncWebAds
+// below) - the sole source of ads for the slideshow. A person's own
+// manually-picked local folder of images used to be a second, parallel
+// source alongside this one; removed (Sam, 2026-09-15) since the Ad
+// Manager fully replaced it and having both just caused confusion about
+// which one was actually in charge.
 const WEB_ADS_DIR = path.join(USER_DATA, 'web-ads')
 // Per-ad display settings (how long it shows, how large) set in the Ad
 // Manager's own admin page - keyed on the same filename WEB_ADS_DIR
 // downloads it under, so ads-folder:list (below) can attach the right
-// settings to the right file. Only ever covers web-synced ads; a file
-// added through the person's own local adsFolder has no entry here and
-// falls back to this app's own adsSecondsPerImage setting + full size,
-// exactly as before this feature existed.
+// settings to the right file.
 const WEB_ADS_METADATA_PATH = path.join(USER_DATA, 'web-ads-metadata.json')
 
 const DEFAULT_SETTINGS = {
   mediaFolder: '',
   crossfadeSeconds: 3,
   volume: 1,
-  // Ad slideshow between songs - off by default (adsEnabled false, and
-  // adsFolder empty either way means nothing to show even if enabled).
+  // Ad slideshow between songs - off by default (the Ad Manager having
+  // no ads targeted at this app either way means nothing to show even
+  // if enabled).
   adsEnabled: false,
-  adsFolder: '',
   adsEverySongs: 4,
   adsSecondsPerImage: 6,
   // Short muted bumper clip, played once after each song ends (and after
@@ -86,8 +84,8 @@ const DEFAULT_SETTINGS = {
 }
 
 // Bundled with the app (assets/**/* is included in electron-builder's
-// `files`), not user-configurable like adsFolder - there's exactly one
-// intro clip, shipped with the install, so there's nothing to pick.
+// `files`) - there's exactly one intro clip, shipped with the install,
+// so there's nothing to pick.
 const INTRO_VIDEO_PATH = path.join(__dirname, 'assets', 'intro-video.mp4')
 
 // The standalone Ad Manager (separate repo: mslsc-jukebox-ad-upload,
@@ -117,8 +115,7 @@ function callJukeboxAdsFn(body) {
 // Pulls the current web-uploaded ad list and reconciles it against
 // WEB_ADS_DIR - downloads anything new, deletes anything no longer
 // listed remotely (so a delete from the web page takes effect here on
-// the next pass, not just on the page itself). Never touches adsFolder,
-// the person's own separately-managed local folder. Failure here (no
+// the next pass, not just on the page itself). Failure here (no
 // internet, function unreachable) is never fatal - whatever's already
 // downloaded keeps working exactly as before, same principle as every
 // other "best-effort background sync" in this app.
@@ -683,26 +680,10 @@ ipcMain.handle('library:move-file-to-folder', (_event, sourcePath, folderPath) =
 
 ipcMain.handle('intro-video:get-path', () => (fs.existsSync(INTRO_VIDEO_PATH) ? INTRO_VIDEO_PATH : null))
 
-ipcMain.handle('ads-folder:choose', async () => {
-  const result = await dialog.showOpenDialog(controlWindow, { properties: ['openDirectory'] })
-  if (result.canceled || result.filePaths.length === 0) return null
-  const folder = result.filePaths[0]
-  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), adsFolder: folder }
-  writeJson(SETTINGS_PATH, settings)
-  if (displayWindow) displayWindow.webContents.send('settings:updated', settings)
-  return folder
-})
-
 ipcMain.handle('ads-folder:list', () => {
-  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
-  const files = []
-  if (settings.adsFolder) files.push(...walkImageFiles(settings.adsFolder))
-  if (fs.existsSync(WEB_ADS_DIR)) files.push(...walkImageFiles(WEB_ADS_DIR))
-  // Attaches each web-synced ad's own display seconds/size, set in the
-  // Ad Manager - keyed on filename, so a file in the person's own local
-  // adsFolder (never in this map) is left with neither, and Display
-  // falls back to this app's own adsSecondsPerImage setting + full size
-  // for those, exactly as before this feature existed.
+  const files = fs.existsSync(WEB_ADS_DIR) ? walkImageFiles(WEB_ADS_DIR) : []
+  // Attaches each ad's own display seconds/size, set in the Ad Manager -
+  // keyed on filename.
   const metadata = readJson(WEB_ADS_METADATA_PATH, {})
   const withMeta = files.map((f) => ({ ...f, ...metadata[f.filename] }))
   return { files: withMeta }
