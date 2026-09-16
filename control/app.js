@@ -438,23 +438,48 @@ document.getElementById('library-group-by').addEventListener('change', (e) => { 
 // "New folder…" option, which creates one on the spot. moveTrackToFolder
 // handles both of the folder cases; addTrackToPlaylist the manual one.
 function playlistPickerHtml(track) {
-  const manualOptions = playlists.filter((p) => !p.autoFolder && !p.autoArtist)
-    .map((p) => `<option value="playlist:${p.id}">${p.name}</option>`).join('')
-  const folderOptions = playlists.filter((p) => p.autoFolder)
-    .map((p) => `<option value="folder:${p.folderPath}">📁 ${p.name}</option>`).join('')
+  const manualPlaylists = playlists.filter((p) => !p.autoFolder && !p.autoArtist)
+  const folderPlaylists = playlists.filter((p) => p.autoFolder)
+  const artistPlaylists = playlists.filter((p) => p.autoArtist)
+
+  // Which option (if any) reflects where this track already lives -
+  // shown as the picker's own current selection instead of always
+  // resetting to "+ Playlist", so e.g. Sort Unsorted by Decade actually
+  // moving a track into "1980s" shows "1980s" here afterwards, and a
+  // still-unsorted one keeps showing "+ Playlist" - Sam, 2026-09-17:
+  // wants to be able to tell which files haven't been sorted yet just by
+  // scanning this column. Checked in this order because a track only
+  // ever has one folder and one artist tag, but could sit in several
+  // manual playlists at once - a single dropdown can only show one of
+  // those as "current", so manual is last and just takes whichever
+  // matches first.
+  const meta = metadataCache[track.key]
+  const folderMatch = track.folder && folderPlaylists.find((p) => p.folderPath === track.folder)
+  const artistMatch = meta && artistPlaylists.find((p) => p.artistValue === meta.artist)
+  const manualMatch = manualPlaylists.find((p) => p.trackKeys.includes(track.key))
+  let currentValue = ''
+  if (folderMatch) currentValue = `folder:${folderMatch.folderPath}`
+  else if (artistMatch) currentValue = `artist:${artistMatch.artistValue}`
+  else if (manualMatch) currentValue = `playlist:${manualMatch.id}`
+
+  const option = (value, label) =>
+    `<option value="${value}"${value === currentValue ? ' selected' : ''}>${label}</option>`
+
+  const manualOptions = manualPlaylists.map((p) => option(`playlist:${p.id}`, p.name)).join('')
+  const folderOptions = folderPlaylists.map((p) => option(`folder:${p.folderPath}`, `📁 ${p.name}`)).join('')
   // "Joining" an existing artist playlist here is just a quicker way to
   // tag this track as that same artist (setManualMetadata under the
   // hood, same as the 🏷 Tag button) - no retyping a band name that's
   // already on record for another video.
-  const artistOptions = playlists.filter((p) => p.autoArtist)
-    .map((p) => `<option value="artist:${p.artistValue}">🎤 ${p.name}</option>`).join('')
+  const artistOptions = artistPlaylists.map((p) => option(`artist:${p.artistValue}`, `🎤 ${p.name}`)).join('')
+
   return `
     <select data-track-picker="${track.key}">
-      <option value="">+ Playlist</option>
+      ${option('', '+ Playlist')}
       ${manualOptions}
       ${folderOptions}
       ${artistOptions}
-      <option value="new-folder">📁 New folder…</option>
+      ${option('new-folder', '📁 New folder…')}
     </select>`
 }
 
