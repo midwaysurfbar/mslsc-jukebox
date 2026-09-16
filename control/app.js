@@ -828,7 +828,15 @@ document.getElementById('reset-library-btn').addEventListener('click', async () 
 
 function renderQueue() {
   const list = document.getElementById('queue-list')
+  // Already-played tracks drop off the visible list entirely (this is
+  // display-only - queue.tracks/currentIndex themselves are untouched,
+  // so Previous still works and the persisted queue.json stays a full
+  // history+upcoming record). Once the queue reaches idle (finished, as
+  // opposed to "hasn't started yet"), the last-played track drops off
+  // too, since currentIndex never advances past it in that case.
+  const finished = lastPlayerState && lastPlayerState.status === 'idle'
   list.innerHTML = queue.tracks.map((key, i) => {
+    if (i < queue.currentIndex || (i === queue.currentIndex && finished)) return ''
     const track = trackByKey(key)
     if (!track) return ''
     const isNowPlaying = i === queue.currentIndex && lastPlayerState && lastPlayerState.status !== 'idle'
@@ -1118,6 +1126,19 @@ jukebox.onUpdateStatus((status) => {
 
 // --- Init ---
 
+// Hands the queue that survived from before the app was last closed back
+// to Display, which otherwise starts fully idle/empty even though this
+// window's own Queue tab still shows it - the persisted list only really
+// "reappears" once Display is actually resumed on it. Full tracks array
+// (not just what's left unplayed) so Previous still reaches back into
+// whatever already played before the restart, same as any other resume.
+function resumeQueueOnDisplay() {
+  if (!queue.tracks.length || queue.currentIndex >= queue.tracks.length) return
+  const tracks = queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack)
+  if (!tracks.length) return
+  jukebox.playerLoadQueue({ tracks, startIndex: queue.currentIndex })
+}
+
 async function init() {
   await loadSettings()
   playlists = await jukebox.getPlaylists()
@@ -1125,6 +1146,11 @@ async function init() {
   renderPlaylists()
   renderQueue()
   if (settings.mediaFolder) await runLibraryOp(rescanLibrary)
+  // rescanLibrary doesn't itself re-render the queue, so the earlier
+  // renderQueue() above ran against an empty library - re-render now
+  // that trackByKey can actually resolve the persisted queue's tracks.
+  renderQueue()
+  resumeQueueOnDisplay()
   document.getElementById('app-version').textContent = await jukebox.getAppVersion()
 }
 init()
