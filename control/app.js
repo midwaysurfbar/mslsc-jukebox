@@ -553,7 +553,7 @@ function renderLibrary() {
     const value = e.target.value
     e.target.value = ''
     if (!value) return
-    if (value.startsWith('playlist:')) addTrackToPlaylist(value.slice('playlist:'.length), trackKey)
+    if (value.startsWith('playlist:')) moveTrackToManualPlaylist(trackKey, value.slice('playlist:'.length))
     else if (value.startsWith('folder:')) runLibraryOp(() => moveTrackToFolder(trackKey, value.slice('folder:'.length)))
     else if (value.startsWith('artist:')) assignArtist(trackKey, value.slice('artist:'.length))
     else if (value === 'new-folder') {
@@ -896,6 +896,28 @@ async function removeTrackFromPlaylist(playlistId, trackKey) {
   playlist.trackKeys = playlist.trackKeys.filter((k) => k !== trackKey)
   playlists = await jukebox.savePlaylist(playlist)
   renderPlaylists()
+}
+
+// The Library grid's own picker (playlistPickerHtml above) now shows a
+// track's current manual playlist as its selection, same as it already
+// does for a folder or an artist tag - so picking a *different* one
+// there needs to actually move it, not just pile on a second
+// membership the way addTrackToPlaylist alone would (a track can still
+// end up in several manual playlists some other way, e.g. via the
+// Playlists tab's own "add track" controls - this only replaces
+// whichever one this exact picker was just showing as current).
+// Also covers a real gap the plain add-only version had: nothing here
+// used to re-render the Library grid itself, so the picker wouldn't
+// show the new selection until some other action happened to redraw it.
+async function moveTrackToManualPlaylist(trackKey, newPlaylistId) {
+  const currentManual = playlists.find(
+    (p) => !p.autoFolder && !p.autoArtist && p.trackKeys.includes(trackKey),
+  )
+  if (currentManual && currentManual.id !== newPlaylistId) {
+    await removeTrackFromPlaylist(currentManual.id, trackKey)
+  }
+  await addTrackToPlaylist(newPlaylistId, trackKey)
+  renderLibrary()
 }
 
 async function playPlaylistNow(playlistId) {
