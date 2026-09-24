@@ -522,12 +522,32 @@ ipcMain.handle('settings:save', (_event, settings) => {
   return true
 })
 
+// A file's key comes from its full path, so pointing the Jukebox at the
+// same videos in a new place (e.g. the drive moving from a network share
+// into this PC - Sam, 2026-09-25, swapping the venue and Bar Menu PCs)
+// would otherwise make every video look brand new and lose its
+// playlists, tags, thumbnail, and converted copy. Any file sitting at the
+// same relative path, with the same size, as it did under the old folder
+// is treated as the same video and carries all of that across.
+function relinkMovedLibrary(previousFolder, newFolder) {
+  if (!previousFolder || path.resolve(previousFolder) === path.resolve(newFolder)) return 0
+  const pairs = new Map()
+  for (const file of walkVideoFiles(newFolder, newFolder)) {
+    const oldKey = fileKey(path.join(previousFolder, path.relative(newFolder, file.path)), file.size)
+    if (oldKey !== file.key) pairs.set(oldKey, file.key)
+  }
+  remapFileKeys(pairs)
+  return pairs.size
+}
+
 ipcMain.handle('media-folder:choose', async () => {
   const result = await dialog.showOpenDialog(controlWindow, { properties: ['openDirectory'] })
   if (result.canceled || result.filePaths.length === 0) return null
   const folder = result.filePaths[0]
+  const previousFolder = readJson(SETTINGS_PATH, {}).mediaFolder || ''
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), mediaFolder: folder }
   writeJson(SETTINGS_PATH, settings)
+  relinkMovedLibrary(previousFolder, folder)
   startWatchingMediaFolder(folder)
   return folder
 })
@@ -635,43 +655,53 @@ ipcMain.handle('media-folder:list', () => {
 // Shared by every action below that moves/renames a real media file -
 // doing so changes its key (md5 of path+size, see fileKey above), so
 // anything that referenced the old key needs to follow it to the new one:
-// its cached thumbnail/converted copy, its metadata guess, every
-// playlist, and the queue. Each store is read and written fresh rather
-// than threaded through callers, since this only ever runs a handful of
-// times per action, never once per file in a hot loop.
-function remapFileKey(oldKey, newKey) {
-  for (const [dir, ext] of [[THUMBNAILS_DIR, '.jpg'], [CONVERTED_DIR, '.mp4']]) {
-    const oldPath = path.join(dir, `${oldKey}${ext}`)
-    if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(dir, `${newKey}${ext}`))
+// its cached thumbnail/converted copy, its remembered duration, its
+// metadata guess, every playlist, and the queue. Takes a whole batch of
+// old->new pairs at once so re-linking a full library (see
+// media-folder:choose) reads and writes each store once, not per file.
+function remapFileKeys(pairs) {
+  if (!pairs.size) return
+  for (const [oldKey, newKey] of pairs) {
+    for (const [dir, ext] of [[THUMBNAILS_DIR, '.jpg'], [CONVERTED_DIR, '.mp4']]) {
+      const oldPath = path.join(dir, `${oldKey}${ext}`)
+      if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(dir, `${newKey}${ext}`))
+    }
   }
 
   const info = loadTrackInfo()
-  if (info[oldKey]) {
-    info[newKey] = info[oldKey]
-    delete info[oldKey]
-    scheduleTrackInfoWrite()
+  let infoChanged = false
+  for (const [oldKey, newKey] of pairs) {
+    if (info[oldKey]) { info[newKey] = info[oldKey]; delete info[oldKey]; infoChanged = true }
   }
+  if (infoChanged) scheduleTrackInfoWrite()
 
   const metadata = readJson(METADATA_PATH, {})
-  if (metadata[oldKey]) {
-    metadata[newKey] = metadata[oldKey]
-    delete metadata[oldKey]
-    writeJson(METADATA_PATH, metadata)
+  let metadataChanged = false
+  for (const [oldKey, newKey] of pairs) {
+    if (metadata[oldKey]) { metadata[newKey] = metadata[oldKey]; delete metadata[oldKey]; metadataChanged = true }
   }
+  if (metadataChanged) writeJson(METADATA_PATH, metadata)
 
   const playlists = readJson(PLAYLISTS_PATH, [])
   let playlistsChanged = false
   for (const p of playlists) {
-    const idx = p.trackKeys.indexOf(oldKey)
-    if (idx >= 0) { p.trackKeys[idx] = newKey; playlistsChanged = true }
+    p.trackKeys = p.trackKeys.map((k) => {
+      if (!pairs.has(k)) return k
+      playlistsChanged = true
+      return pairs.get(k)
+    })
   }
   if (playlistsChanged) writeJson(PLAYLISTS_PATH, playlists)
 
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
-  if (queue.tracks.includes(oldKey)) {
-    queue.tracks = queue.tracks.map((k) => (k === oldKey ? newKey : k))
+  if (queue.tracks.some((k) => pairs.has(k))) {
+    queue.tracks = queue.tracks.map((k) => pairs.get(k) || k)
     writeJson(QUEUE_PATH, queue)
   }
+}
+
+function remapFileKey(oldKey, newKey) {
+  remapFileKeys(new Map([[oldKey, newKey]]))
 }
 
 // Moves one real file into `destDir` (creating it if needed), handling a
@@ -912,6 +942,106 @@ ipcMain.handle('library:trash-unplayable-file', async (_event, key, filePath) =>
   if (!resolved) throw new Error('Refusing to remove a file outside the configured media folder.')
   await shell.trashItem(resolved)
   return purgeDerivedState(key)
+})
+
+// --- IPC: replace an original with its converted copy ---
+//
+// Sam, 2026-09-25: keeping both the original download AND a converted copy
+// of every video "seems a bit unusual" and will eventually run the PC out
+// of space. Once a converted copy is confirmed good, this puts it in the
+// original's place on the media drive (same folder, same name, .mp4) and
+// sends the original to the Recycle Bin - recoverable, deliberately not a
+// permanent delete (Sam's call: space on the 4TB drive isn't a concern).
+//
+// Only runs when the media folder is on this PC's own drive. On a network
+// share the Recycle Bin doesn't exist (Windows would delete outright), so
+// there it does nothing and both copies are kept exactly as before.
+function isNetworkPath(p) {
+  return /^(\\\\|\/\/)/.test(p)
+}
+
+// Reads a file's length with the bundled ffmpeg - it prints "Duration:
+// hh:mm:ss.xx" for any file it can open, including formats Chromium can't
+// play (which is exactly the originals this is used on).
+function probeDuration(filePath) {
+  return new Promise((resolve) => {
+    let stderr = ''
+    let proc
+    try {
+      proc = spawn(FFMPEG_PATH, ['-hide_banner', '-i', filePath])
+    } catch {
+      resolve(null)
+      return
+    }
+    const timer = setTimeout(() => { try { proc.kill() } catch { /* already gone */ } }, 60000)
+    proc.stderr.on('data', (chunk) => { stderr += chunk })
+    proc.on('error', () => { clearTimeout(timer); resolve(null) })
+    proc.on('close', () => {
+      clearTimeout(timer)
+      const m = stderr.match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/)
+      resolve(m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : null)
+    })
+  })
+}
+
+ipcMain.handle('convert:replace-original', async (_event, key, sourcePath) => {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  const mediaFolder = settings.mediaFolder
+  if (!mediaFolder || isNetworkPath(mediaFolder)) return { replaced: false, reason: 'network' }
+  if (!resolveInsideMediaFolder(sourcePath)) throw new Error('Refusing to touch a file outside the configured media folder.')
+  const convertedPath = path.join(CONVERTED_DIR, `${key}.mp4`)
+  if (!fs.existsSync(convertedPath) || !fs.existsSync(sourcePath)) return { replaced: false, reason: 'missing' }
+
+  // Same length (within 2s, or 1% for long videos) or it's left alone -
+  // a conversion that got cut short must never replace the real thing.
+  const [originalLength, convertedLength] = await Promise.all([probeDuration(sourcePath), probeDuration(convertedPath)])
+  if (!originalLength || !convertedLength || Math.abs(originalLength - convertedLength) > Math.max(2, originalLength * 0.01)) {
+    return { replaced: false, reason: 'length' }
+  }
+
+  // Copied in under a dot-name first (dot-files are skipped by every scan),
+  // so a failure part-way never leaves a half-written video in the library.
+  const dir = path.dirname(sourcePath)
+  const base = path.basename(sourcePath, path.extname(sourcePath))
+  const tempPath = path.join(dir, `.${base}.jukebox-tmp.mp4`)
+  fs.copyFileSync(convertedPath, tempPath)
+  if (fs.statSync(tempPath).size !== fs.statSync(convertedPath).size) {
+    fs.rmSync(tempPath, { force: true })
+    throw new Error('The copy onto the media drive came out incomplete.')
+  }
+
+  try {
+    await shell.trashItem(sourcePath)
+  } catch (err) {
+    fs.rmSync(tempPath, { force: true })
+    throw new Error(`Could not move the original to the Recycle Bin: ${err.message}`)
+  }
+
+  let finalPath = path.join(dir, `${base}.mp4`)
+  for (let n = 2; fs.existsSync(finalPath); n += 1) finalPath = path.join(dir, `${base} (${n}).mp4`)
+  fs.renameSync(tempPath, finalPath)
+
+  // The cached copy's job is done - it now lives on the media drive as the
+  // video itself. Removed before re-keying so the new key doesn't inherit
+  // a "converted copy" pointing at a file that no longer needs one. If it's
+  // playing right now Windows won't let go of it yet; the next rescan's
+  // orphan clean-up gets it then.
+  try { fs.rmSync(convertedPath, { force: true }) } catch { /* cleaned up on a later scan */ }
+
+  const newKey = fileKey(finalPath, fs.statSync(finalPath).size)
+  remapFileKey(key, newKey)
+  const info = loadTrackInfo()
+  info[newKey] = { duration: convertedLength, error: false, needsConversion: false }
+  scheduleTrackInfoWrite()
+
+  const files = attachKnownInfo(walkVideoFiles(mediaFolder, mediaFolder))
+  const playlists = syncAllAutoPlaylists(files)
+  return { replaced: true, newKey, files, playlists, queue: readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 }) }
+})
+
+ipcMain.handle('convert:can-replace-originals', () => {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  return Boolean(settings.mediaFolder) && !isNetworkPath(settings.mediaFolder)
 })
 
 // --- IPC: thumbnails (generated client-side in Control via <video>+<canvas>, saved here) ---

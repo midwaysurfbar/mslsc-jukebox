@@ -50,6 +50,9 @@ contextBridge.exposeInMainWorld('jukebox', {
   // Format conversion (bundled ffmpeg, runs in main - see convert:run)
   getConvertedPath: (key) => ipcRenderer.invoke('convert:get-path', key),
   convertFile: (key, sourcePath) => ipcRenderer.invoke('convert:run', key, sourcePath),
+  // Puts a checked converted copy in the original's place (original -> Recycle Bin)
+  replaceOriginal: (key, sourcePath) => ipcRenderer.invoke('convert:replace-original', key, sourcePath),
+  canReplaceOriginals: () => ipcRenderer.invoke('convert:can-replace-originals'),
 
   // Metadata enrichment
   getMetadataCache: () => ipcRenderer.invoke('metadata:get-cache'),

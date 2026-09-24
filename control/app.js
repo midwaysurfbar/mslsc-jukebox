@@ -397,7 +397,15 @@ document.getElementById('rescan-btn').addEventListener('click', () => runLibrary
 // runLibraryOp queue as every other library-mutating flow, since this
 // can otherwise fire while an explicit action (which also touches the
 // media folder) is still mid-flight.
-jukebox.onMediaFolderChanged(() => runLibraryOp(rescanLibrary))
+// At most one of these waits in the queue at a time - a long job that
+// touches the media folder file after file (Tidy Up Converted Videos)
+// would otherwise stack up one rescan per file behind it.
+let folderRescanQueued = false
+jukebox.onMediaFolderChanged(() => {
+  if (folderRescanQueued) return
+  folderRescanQueued = true
+  runLibraryOp(() => { folderRescanQueued = false; return rescanLibrary() })
+})
 
 // Reconciles a fresh main-process file listing (from a move/sort action,
 // not a full Rescan) with the client's existing `library` array, which
@@ -863,6 +871,7 @@ async function convertTrack(key) {
   const stillBroken = Boolean(failureReason) || track.error
   if (!stillBroken) {
     renderLibrary()
+    await runLibraryOp(() => replaceOriginalWithConverted(key))
     return 'ok'
   }
 
@@ -878,6 +887,63 @@ async function convertTrack(key) {
     return 'failed'
   }
 }
+
+// Puts a converted copy in the original's place on the media drive and
+// sends the original to the Recycle Bin (see convert:replace-original in
+// main.js - it checks both are the same length first, and does nothing at
+// all on a network folder). The file's key changes with it, so this
+// re-syncs everything that referenced the old one, including whatever
+// Display already has queued up, since the old converted path it was
+// given no longer exists. Returns 'replaced', 'kept' or 'failed'.
+async function replaceOriginalWithConverted(key) {
+  const track = trackByKey(key)
+  if (!track || !track.convertedPath) return 'kept'
+  let result
+  try {
+    result = await jukebox.replaceOriginal(key, track.path)
+  } catch (err) {
+    document.getElementById('library-status').textContent = `Converted "${track.filename}" but kept the original: ${err.message}`
+    return 'failed'
+  }
+  if (!result.replaced) return 'kept'
+  const newOnes = reconcileLibrary(result.files)
+  playlists = result.playlists
+  queue = result.queue
+  metadataCache = await jukebox.getMetadataCache()
+  renderLibrary()
+  renderPlaylists()
+  renderQueue()
+  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+  for (const t of newOnes.filter(needsProbe)) await generateThumbAndDuration(t)
+  return 'replaced'
+}
+
+document.getElementById('replace-originals-btn').addEventListener('click', () => runLibraryOp(async () => {
+  const status = document.getElementById('replace-originals-status')
+  if (!(await jukebox.canReplaceOriginals())) {
+    status.textContent = 'Only available once the videos are on this PC\'s own drive - the media folder is currently a network folder.'
+    return
+  }
+  const toReplace = library.filter((t) => t.convertedPath).map((t) => t.key)
+  if (!toReplace.length) { status.textContent = 'Nothing to tidy up - every video already has just one copy.'; return }
+  const sure = confirm(
+    `${toReplace.length} converted video${toReplace.length === 1 ? '' : 's'} still have two copies.\n\n` +
+    'Each converted copy will be moved onto the media drive in place of its original, and the original sent to the Recycle Bin. ' +
+    'Playlists, tags and the queue carry over. Anything that doesn\'t check out is left exactly as it is.\n\n' +
+    'This can take a while - best done while the bar is closed. Continue?'
+  )
+  if (!sure) return
+  let replaced = 0
+  let kept = 0
+  for (let i = 0; i < toReplace.length; i++) {
+    status.textContent = `Tidying up ${i + 1}/${toReplace.length}…`
+    const outcome = await replaceOriginalWithConverted(toReplace[i])
+    if (outcome === 'replaced') replaced += 1
+    else kept += 1
+  }
+  status.textContent = `Done - ${replaced} video${replaced === 1 ? '' : 's'} now have one copy.` +
+    (kept ? ` ${kept} kept both copies (lengths didn't match, or the original couldn't be moved) - see the Library status line for the last one.` : '')
+}))
 
 document.getElementById('convert-all-btn').addEventListener('click', async () => {
   const status = document.getElementById('library-status')
