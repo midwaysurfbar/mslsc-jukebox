@@ -48,7 +48,19 @@ function toFileUrl(filePath) {
   return 'file://' + filePath.split('/').map(encodeURIComponent).join('/')
 }
 
-function trackByKey(key) { return library.find((t) => t.key === key) }
+// Indexed by key, rebuilt only when `library` is reassigned (every flow
+// that changes it replaces the array rather than mutating it). A plain
+// library.find() here was a full scan per lookup - fine at 50 tracks, not
+// at ~2,500 with the queue calling this once per row every second.
+let libraryIndex = new Map()
+let libraryIndexFor = null
+function trackByKey(key) {
+  if (libraryIndexFor !== library) {
+    libraryIndex = new Map(library.map((t) => [t.key, t]))
+    libraryIndexFor = library
+  }
+  return libraryIndex.get(key)
+}
 function fmtTime(seconds) {
   if (!seconds || !isFinite(seconds)) return '0:00'
   const m = Math.floor(seconds / 60)
@@ -230,6 +242,11 @@ async function generateThumbAndDuration(track) {
   return new Promise((resolve) => {
     let settled = false
     let metadataLoaded = false
+    // True once Chromium gave a real answer (metadata or a decode error).
+    // Only then is the result remembered for next launch - a timeout is
+    // usually a slow network read, not a verdict on the file, so that one
+    // gets probed again next time rather than being stuck as "broken".
+    let measured = false
     const video = document.createElement('video')
 
     const finish = () => {
@@ -237,6 +254,10 @@ async function generateThumbAndDuration(track) {
       settled = true
       clearTimeout(timeoutId)
       video.remove()
+      if (measured) {
+        track.infoCached = true
+        jukebox.saveTrackInfo(track.key, { duration: track.duration, error: track.error, needsConversion: track.needsConversion })
+      }
       resolve()
     }
 
@@ -267,6 +288,7 @@ async function generateThumbAndDuration(track) {
     video.src = toFileUrl(playablePath(track))
     video.addEventListener('loadedmetadata', () => {
       metadataLoaded = true
+      measured = true
       // loadedmetadata firing only means Chromium could read the
       // container's headers, not that the duration in them is real - a
       // malformed/missing moov atom (or similar) can report 0, NaN, or
@@ -298,6 +320,7 @@ async function generateThumbAndDuration(track) {
       finish()
     })
     video.addEventListener('error', () => {
+      measured = true
       track.duration = 0
       track.error = true
       // Only offer conversion for the original file failing - if the
@@ -307,6 +330,12 @@ async function generateThumbAndDuration(track) {
       finish()
     })
   })
+}
+
+// A track only needs opening in a <video> if it's never been measured, or
+// it's playable but somehow still has no thumbnail.
+function needsProbe(track) {
+  return !track.infoCached || (!track.thumbPath && !track.error)
 }
 
 async function rescanLibrary() {
@@ -337,12 +366,24 @@ async function rescanLibrary() {
       : ''
   renderLibrary()
   renderPlaylists()
+  // Only files never measured before (main hands back what it remembers -
+  // see track-info in main.js), or a playable one still missing its
+  // thumbnail, actually get opened. Everything else is ready as-is.
+  const toProbe = newOnes.filter(needsProbe)
   // Thumbnails/duration are generated a few at a time, not all at once,
-  // so a big batch of new files doesn't freeze the UI - re-render as each
-  // batch lands.
+  // so a big batch of new files doesn't freeze the UI. The grid is
+  // redrawn at most about once a second while this runs, not after every
+  // batch - on a first-ever scan of ~2,500 files that was ~600 full
+  // redraws back to back.
   const BATCH = 4
-  for (let i = 0; i < newOnes.length; i += BATCH) {
-    await Promise.all(newOnes.slice(i, i + BATCH).map(generateThumbAndDuration))
+  let lastRender = Date.now()
+  for (let i = 0; i < toProbe.length; i += BATCH) {
+    document.getElementById('library-status').textContent = `Reading new videos ${Math.min(i + BATCH, toProbe.length)}/${toProbe.length}…`
+    await Promise.all(toProbe.slice(i, i + BATCH).map(generateThumbAndDuration))
+    if (Date.now() - lastRender > 1000) { renderLibrary(); lastRender = Date.now() }
+  }
+  if (toProbe.length) {
+    document.getElementById('library-status').textContent = ''
     renderLibrary()
   }
 }
@@ -423,12 +464,20 @@ document.getElementById('sort-decade-btn').addEventListener('click', () => runLi
   renderQueue()
   // Only the moved tracks actually need a fresh thumbnail/duration pass -
   // everything else already has one and reconcileLibrary preserved it.
-  for (const track of newOnes) await generateThumbAndDuration(track)
-  if (newOnes.length) renderLibrary()
+  const toProbe = newOnes.filter(needsProbe)
+  for (const track of toProbe) await generateThumbAndDuration(track)
+  if (toProbe.length) renderLibrary()
 }))
 
-document.getElementById('library-search').addEventListener('input', (e) => { searchQuery = e.target.value.toLowerCase(); renderLibrary() })
-document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; groupFilter = null; renderLibrary() })
+// Waits for a short pause in typing before redrawing, rather than
+// redrawing the whole grid on every single keystroke.
+let searchDebounce = null
+document.getElementById('library-search').addEventListener('input', (e) => {
+  clearTimeout(searchDebounce)
+  const value = e.target.value.toLowerCase()
+  searchDebounce = setTimeout(() => { searchQuery = value; renderLibrary({ reset: true }) }, 200)
+})
+document.getElementById('library-group-by').addEventListener('change', (e) => { groupBy = e.target.value; groupFilter = null; renderLibrary({ reset: true }) })
 
 // One picker, two different things happening underneath depending on
 // what's chosen - a manual playlist just gets the track key appended
@@ -438,9 +487,10 @@ document.getElementById('library-group-by').addEventListener('change', (e) => { 
 // "New folder…" option, which creates one on the spot. moveTrackToFolder
 // handles both of the folder cases; addTrackToPlaylist the manual one.
 function playlistPickerHtml(track) {
-  const manualPlaylists = playlists.filter((p) => !p.autoFolder && !p.autoArtist)
-  const folderPlaylists = playlists.filter((p) => p.autoFolder)
-  const artistPlaylists = playlists.filter((p) => p.autoArtist)
+  // Built once per renderLibrary() pass (see buildPickerContext below),
+  // not once per tile - with ~2,500 tiles and ~170 playlists, redoing
+  // these lookups per tile was a big part of every redraw.
+  const ctx = pickerContext
 
   // Which option (if any) reflects where this track already lives -
   // shown as the picker's own current selection instead of always
@@ -454,33 +504,58 @@ function playlistPickerHtml(track) {
   // those as "current", so manual is last and just takes whichever
   // matches first.
   const meta = metadataCache[track.key]
-  const folderMatch = track.folder && folderPlaylists.find((p) => p.folderPath === track.folder)
-  const artistMatch = meta && artistPlaylists.find((p) => p.artistValue === meta.artist)
-  const manualMatch = manualPlaylists.find((p) => p.trackKeys.includes(track.key))
+  const folderMatch = track.folder && ctx.folderByPath.get(track.folder)
+  const artistMatch = meta && ctx.artistByValue.get(meta.artist)
+  const manualMatch = ctx.manualByTrack.get(track.key)
   let currentValue = ''
-  if (folderMatch) currentValue = `folder:${folderMatch.folderPath}`
-  else if (artistMatch) currentValue = `artist:${artistMatch.artistValue}`
-  else if (manualMatch) currentValue = `playlist:${manualMatch.id}`
+  let currentLabel = '+ Playlist'
+  if (folderMatch) { currentValue = `folder:${folderMatch.folderPath}`; currentLabel = `📁 ${folderMatch.name}` }
+  else if (artistMatch) { currentValue = `artist:${artistMatch.artistValue}`; currentLabel = `🎤 ${artistMatch.name}` }
+  else if (manualMatch) { currentValue = `playlist:${manualMatch.id}`; currentLabel = manualMatch.name }
 
-  const option = (value, label) =>
-    `<option value="${value}"${value === currentValue ? ' selected' : ''}>${label}</option>`
+  // Only the current selection is rendered up front - the full list of
+  // every playlist is filled in the moment the picker is clicked or
+  // focused (fillPicker below). Rendering all ~170 options into every
+  // one of ~2,500 tiles was ~430,000 <option>s on one page.
+  return `
+    <select data-track-picker="${track.key}" data-current="${currentValue}">
+      <option value="${currentValue}" selected>${currentLabel}</option>
+    </select>`
+}
 
-  const manualOptions = manualPlaylists.map((p) => option(`playlist:${p.id}`, p.name)).join('')
-  const folderOptions = folderPlaylists.map((p) => option(`folder:${p.folderPath}`, `📁 ${p.name}`)).join('')
+function buildPickerContext() {
+  const manualPlaylists = playlists.filter((p) => !p.autoFolder && !p.autoArtist)
+  const folderPlaylists = playlists.filter((p) => p.autoFolder)
+  const artistPlaylists = playlists.filter((p) => p.autoArtist)
+  const manualByTrack = new Map()
+  for (const p of manualPlaylists) {
+    for (const key of p.trackKeys) if (!manualByTrack.has(key)) manualByTrack.set(key, p)
+  }
+  const option = (value, label) => `<option value="${value}">${label}</option>`
   // "Joining" an existing artist playlist here is just a quicker way to
   // tag this track as that same artist (setManualMetadata under the
   // hood, same as the 🏷 Tag button) - no retyping a band name that's
   // already on record for another video.
-  const artistOptions = artistPlaylists.map((p) => option(`artist:${p.artistValue}`, `🎤 ${p.name}`)).join('')
+  const optionsHtml =
+    option('', '+ Playlist') +
+    manualPlaylists.map((p) => option(`playlist:${p.id}`, p.name)).join('') +
+    folderPlaylists.map((p) => option(`folder:${p.folderPath}`, `📁 ${p.name}`)).join('') +
+    artistPlaylists.map((p) => option(`artist:${p.artistValue}`, `🎤 ${p.name}`)).join('') +
+    option('new-folder', '📁 New folder…')
+  return {
+    folderByPath: new Map(folderPlaylists.map((p) => [p.folderPath, p])),
+    artistByValue: new Map(artistPlaylists.map((p) => [p.artistValue, p])),
+    manualByTrack,
+    optionsHtml,
+  }
+}
+let pickerContext = buildPickerContext()
 
-  return `
-    <select data-track-picker="${track.key}">
-      ${option('', '+ Playlist')}
-      ${manualOptions}
-      ${folderOptions}
-      ${artistOptions}
-      ${option('new-folder', '📁 New folder…')}
-    </select>`
+function fillPicker(select) {
+  if (select.dataset.filled) return
+  select.dataset.filled = '1'
+  select.innerHTML = pickerContext.optionsHtml
+  select.value = select.dataset.current
 }
 
 function renderTrackTile(track) {
@@ -509,9 +584,54 @@ function renderTrackTile(track) {
     </div>`
 }
 
-function renderLibrary() {
-  const grid = document.getElementById('library-grid')
-  let items = library.filter((t) => t.filename.toLowerCase().includes(searchQuery))
+// The grid is drawn a page at a time - the first LIBRARY_PAGE entries
+// straight away, then another page each time the bottom comes into view.
+// Drawing all ~2,500 tiles in one go (and again on every search
+// keystroke, tag, or move) is what made the Library feel slow.
+const LIBRARY_PAGE = 120
+let libraryEntries = []      // [{html: () => string}] - headers and tiles, in display order
+let libraryShown = 0
+const libraryGrid = document.getElementById('library-grid')
+const librarySentinel = document.createElement('div')
+librarySentinel.className = 'library-sentinel'
+const librarySentinelObserver = new IntersectionObserver((observed) => {
+  if (observed.some((o) => o.isIntersecting)) showMoreLibrary()
+}, { rootMargin: '600px' })
+
+function showMoreLibrary() {
+  if (libraryShown >= libraryEntries.length) return
+  const next = libraryEntries.slice(libraryShown, libraryShown + LIBRARY_PAGE)
+  libraryShown += next.length
+  librarySentinel.remove()
+  libraryGrid.insertAdjacentHTML('beforeend', next.map((e) => e.html()).join(''))
+  if (libraryShown < libraryEntries.length) libraryGrid.appendChild(librarySentinel)
+}
+
+// The observer only fires when the bottom marker *changes* between off-
+// and on-screen - if a freshly added page is short enough that the marker
+// is still in view, nothing new would fire. This tops up in that case.
+// Skipped while the Library tab is hidden (every size reads as 0 then,
+// which would otherwise look like "in view" and load everything).
+function topUpLibrary() {
+  requestAnimationFrame(() => {
+    if (!librarySentinel.isConnected || libraryGrid.offsetParent === null) return
+    if (librarySentinel.getBoundingClientRect().top < window.innerHeight + 600) {
+      showMoreLibrary()
+      topUpLibrary()
+    }
+  })
+}
+
+// `reset` (a new search, grouping, or group filter) starts back at the
+// first page. Anything else - a tag, a move, a thumbnail landing - keeps
+// however many tiles were already showing, so the list doesn't jump
+// back to the top under whoever's scrolling it.
+function renderLibrary({ reset = false } = {}) {
+  const keepShown = reset ? 0 : libraryShown
+  pickerContext = buildPickerContext()
+  let items = searchQuery ? library.filter((t) => t.filename.toLowerCase().includes(searchQuery)) : library
+  const entries = []
+  const tile = (track) => ({ html: () => renderTrackTile(track) })
 
   if (groupBy) {
     const groups = new Map()
@@ -526,48 +646,73 @@ function renderLibrary() {
     if (groupFilter && !groups.has(groupFilter)) groupFilter = null
 
     if (groupFilter) {
-      grid.innerHTML =
-        `<button class="secondary" id="clear-group-filter-btn">← Show every ${groupBy}</button>` +
-        `<div class="library-group">${groupFilter}</div>` +
-        groups.get(groupFilter).map(renderTrackTile).join('')
+      entries.push({ html: () => `<button class="secondary" data-clear-group-filter>← Show every ${groupBy}</button>` })
+      entries.push({ html: () => `<div class="library-group">${groupFilter}</div>` })
+      entries.push(...groups.get(groupFilter).map(tile))
     } else {
       const sortedLabels = [...groups.keys()].sort((a, b) => (a === 'Unknown' ? 1 : b === 'Unknown' ? -1 : a.localeCompare(b)))
       // Clicking a group header narrows the grid to just that group - the
       // whole point of tagging a video (Sam, 2026-09-13: "sort the music
       // videos by that") is being able to jump straight to one band's
       // videos, not just see them clustered on an otherwise-long page.
-      grid.innerHTML = sortedLabels.map((label) =>
-        `<div class="library-group" data-group-filter="${label}" title="Show only ${label}">${label} <span class="group-count">${groups.get(label).length}</span></div>` +
-        groups.get(label).map(renderTrackTile).join('')
-      ).join('')
+      for (const label of sortedLabels) {
+        const count = groups.get(label).length
+        entries.push({ html: () => `<div class="library-group" data-group-filter="${label}" title="Show only ${label}">${label} <span class="group-count">${count}</span></div>` })
+        entries.push(...groups.get(label).map(tile))
+      }
     }
   } else {
     items = [...items].sort((a, b) => a.filename.localeCompare(b.filename))
-    grid.innerHTML = items.map(renderTrackTile).join('')
+    entries.push(...items.map(tile))
   }
 
-  grid.querySelectorAll('[data-play-now]').forEach((el) => el.addEventListener('click', () => playNow(el.dataset.playNow)))
-  grid.querySelectorAll('[data-add-queue]').forEach((el) => el.addEventListener('click', () => addToQueue(el.dataset.addQueue)))
-  grid.querySelectorAll('[data-track-picker]').forEach((el) => el.addEventListener('change', async (e) => {
-    const trackKey = el.dataset.trackPicker
-    const value = e.target.value
-    e.target.value = ''
-    if (!value) return
-    if (value.startsWith('playlist:')) moveTrackToManualPlaylist(trackKey, value.slice('playlist:'.length))
-    else if (value.startsWith('folder:')) runLibraryOp(() => moveTrackToFolder(trackKey, value.slice('folder:'.length)))
-    else if (value.startsWith('artist:')) assignArtist(trackKey, value.slice('artist:'.length))
-    else if (value === 'new-folder') {
-      const name = await askForFolderName()
-      if (name) runLibraryOp(() => moveTrackToFolder(trackKey, name))
-    }
-  }))
-  grid.querySelectorAll('[data-convert]').forEach((el) => el.addEventListener('click', () => convertTrack(el.dataset.convert)))
-  grid.querySelectorAll('[data-delete-file]').forEach((el) => el.addEventListener('click', () => runLibraryOp(() => deleteFile(el.dataset.deleteFile))))
-  grid.querySelectorAll('[data-edit-tags]').forEach((el) => el.addEventListener('click', () => editTags(el.dataset.editTags)))
-  grid.querySelectorAll('[data-group-filter]').forEach((el) => el.addEventListener('click', () => { groupFilter = el.dataset.groupFilter; renderLibrary() }))
-  const clearGroupFilterBtn = document.getElementById('clear-group-filter-btn')
-  if (clearGroupFilterBtn) clearGroupFilterBtn.addEventListener('click', () => { groupFilter = null; renderLibrary() })
+  libraryEntries = entries
+  libraryShown = 0
+  librarySentinel.remove()
+  libraryGrid.innerHTML = ''
+  const firstBatch = Math.max(LIBRARY_PAGE, keepShown)
+  libraryShown = Math.min(firstBatch, entries.length)
+  libraryGrid.innerHTML = entries.slice(0, libraryShown).map((e) => e.html()).join('')
+  if (libraryShown < entries.length) libraryGrid.appendChild(librarySentinel)
+  topUpLibrary()
 }
+
+librarySentinelObserver.observe(librarySentinel)
+
+// One set of listeners on the grid itself, instead of ~7 per tile
+// re-attached on every redraw.
+libraryGrid.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-play-now],[data-add-queue],[data-convert],[data-delete-file],[data-edit-tags],[data-group-filter],[data-clear-group-filter]')
+  if (!el || !libraryGrid.contains(el)) return
+  if (el.dataset.playNow) playNow(el.dataset.playNow)
+  else if (el.dataset.addQueue) addToQueue(el.dataset.addQueue)
+  else if (el.dataset.convert) convertTrack(el.dataset.convert)
+  else if (el.dataset.deleteFile) runLibraryOp(() => deleteFile(el.dataset.deleteFile))
+  else if (el.dataset.editTags) editTags(el.dataset.editTags)
+  else if (el.dataset.groupFilter !== undefined) { groupFilter = el.dataset.groupFilter; renderLibrary({ reset: true }) }
+  else if (el.hasAttribute('data-clear-group-filter')) { groupFilter = null; renderLibrary({ reset: true }) }
+})
+for (const type of ['mousedown', 'focusin']) {
+  libraryGrid.addEventListener(type, (e) => {
+    const select = e.target.closest('[data-track-picker]')
+    if (select) fillPicker(select)
+  })
+}
+libraryGrid.addEventListener('change', async (e) => {
+  const el = e.target.closest('[data-track-picker]')
+  if (!el) return
+  const trackKey = el.dataset.trackPicker
+  const value = el.value
+  el.value = el.dataset.current
+  if (!value || value === el.dataset.current) return
+  if (value.startsWith('playlist:')) moveTrackToManualPlaylist(trackKey, value.slice('playlist:'.length))
+  else if (value.startsWith('folder:')) runLibraryOp(() => moveTrackToFolder(trackKey, value.slice('folder:'.length)))
+  else if (value.startsWith('artist:')) assignArtist(trackKey, value.slice('artist:'.length))
+  else if (value === 'new-folder') {
+    const name = await askForFolderName()
+    if (name) runLibraryOp(() => moveTrackToFolder(trackKey, name))
+  }
+})
 
 // Shared by both deleteFile (manual) and convertTrack's auto-remove
 // path below - keeps local state from ever drifting from what main
@@ -673,8 +818,9 @@ async function moveTrackToFolder(key, folderPath) {
     renderLibrary()
     renderPlaylists()
     renderQueue()
-    for (const t of newOnes) await generateThumbAndDuration(t)
-    if (newOnes.length) renderLibrary()
+    const toProbe = newOnes.filter(needsProbe)
+    for (const t of toProbe) await generateThumbAndDuration(t)
+    if (toProbe.length) renderLibrary()
   } catch (err) {
     document.getElementById('library-status').textContent = `Could not move "${track.filename}": ${err.message}`
   }
@@ -826,7 +972,19 @@ document.getElementById('reset-library-btn').addEventListener('click', async () 
   renderQueue()
 })
 
+// Only this many upcoming rows are drawn - an "Add All to Queue" of the
+// whole library would otherwise be ~2,500 rows rebuilt on every change.
+const QUEUE_ROWS_SHOWN = 200
+// What the queue list was last drawn from - the player reports its state
+// every second, but the list only needs redrawing when one of these
+// actually changes (see onPlayerState below).
+let lastQueueSignature = ''
+function queueSignature() {
+  return [queue.tracks.length, queue.currentIndex, lastPlayerState && lastPlayerState.status, library.length].join('|')
+}
+
 function renderQueue() {
+  lastQueueSignature = queueSignature()
   const list = document.getElementById('queue-list')
   // Already-played tracks drop off the visible list entirely (this is
   // display-only - queue.tracks/currentIndex themselves are untouched,
@@ -835,8 +993,11 @@ function renderQueue() {
   // opposed to "hasn't started yet"), the last-played track drops off
   // too, since currentIndex never advances past it in that case.
   const finished = lastPlayerState && lastPlayerState.status === 'idle'
+  const firstShown = queue.currentIndex + (finished ? 1 : 0)
+  const lastShown = firstShown + QUEUE_ROWS_SHOWN
+  const hiddenAfter = Math.max(0, queue.tracks.length - lastShown)
   list.innerHTML = queue.tracks.map((key, i) => {
-    if (i < queue.currentIndex || (i === queue.currentIndex && finished)) return ''
+    if (i < firstShown || i >= lastShown) return ''
     const track = trackByKey(key)
     if (!track) return ''
     const isNowPlaying = i === queue.currentIndex && lastPlayerState && lastPlayerState.status !== 'idle'
@@ -852,7 +1013,7 @@ function renderQueue() {
           <button class="danger" data-remove-idx="${i}">✕</button>
         </div>
       </li>`
-  }).join('') || '<p class="eyebrow">Queue is empty — add tracks from the Library.</p>'
+  }).join('') + (hiddenAfter ? `<p class="eyebrow">…and ${hiddenAfter} more after these.</p>` : '') || '<p class="eyebrow">Queue is empty — add tracks from the Library.</p>'
 
   list.querySelectorAll('[data-move-up]').forEach((el) => el.addEventListener('click', () => moveQueueItem(Number(el.dataset.moveUp), -1)))
   list.querySelectorAll('[data-move-down]').forEach((el) => el.addEventListener('click', () => moveQueueItem(Number(el.dataset.moveDown), 1)))
@@ -1101,7 +1262,7 @@ jukebox.onPlayerState((state) => {
     queue.currentIndex = state.currentIndex
     jukebox.saveQueue(queue)
   }
-  renderQueue()
+  if (queueSignature() !== lastQueueSignature) renderQueue()
 })
 
 // --- Software update (Settings tab) ---

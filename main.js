@@ -54,6 +54,9 @@ const QUEUE_PATH = path.join(USER_DATA, 'queue.json')
 const METADATA_PATH = path.join(USER_DATA, 'metadata.json')
 const THUMBNAILS_DIR = path.join(USER_DATA, 'thumbnails')
 const CONVERTED_DIR = path.join(USER_DATA, 'converted')
+// key -> {duration, error, needsConversion} as last measured by Control's
+// <video> probe - see track-info:save below.
+const TRACK_INFO_PATH = path.join(USER_DATA, 'track-info.json')
 // Local cache of ads synced down from the Ad Manager (see syncWebAds
 // below) - the sole source of ads for the slideshow. A person's own
 // manually-picked local folder of images used to be a second, parallel
@@ -529,6 +532,82 @@ ipcMain.handle('media-folder:choose', async () => {
   return folder
 })
 
+// --- Remembered per-track info (duration / playable or not) ---
+//
+// Control used to re-open EVERY video on every launch (its in-memory
+// library starts empty, so every file looked "new") just to read its
+// duration - ~2,500 reads over the network share from the Bar Menu PC,
+// plus a full library redraw after every 4 of them. Sam, 2026-09-25:
+// "slow and clunky". Remembering the result here means a launch only
+// probes files it has genuinely never seen before.
+//
+// Held in memory and written on a short debounce, since a first-ever
+// scan of a big library saves one entry per file in quick succession.
+let trackInfo = null
+let trackInfoWriteTimer = null
+
+function loadTrackInfo() {
+  if (!trackInfo) trackInfo = readJson(TRACK_INFO_PATH, {})
+  return trackInfo
+}
+
+function scheduleTrackInfoWrite() {
+  if (trackInfoWriteTimer) clearTimeout(trackInfoWriteTimer)
+  trackInfoWriteTimer = setTimeout(() => {
+    trackInfoWriteTimer = null
+    writeJson(TRACK_INFO_PATH, loadTrackInfo())
+  }, 2000)
+}
+
+function flushTrackInfo() {
+  if (!trackInfoWriteTimer) return
+  clearTimeout(trackInfoWriteTimer)
+  trackInfoWriteTimer = null
+  writeJson(TRACK_INFO_PATH, loadTrackInfo())
+}
+
+ipcMain.handle('track-info:save', (_event, key, info) => {
+  loadTrackInfo()[key] = {
+    duration: Number(info.duration) || 0,
+    error: Boolean(info.error),
+    needsConversion: Boolean(info.needsConversion),
+  }
+  scheduleTrackInfoWrite()
+  return true
+})
+
+// Two directory listings instead of an existsSync per file - these live
+// on the local disk, but at ~2,500 files it still adds up.
+function listCacheKeys(dir, ext) {
+  try {
+    return new Set(fs.readdirSync(dir).filter((n) => n.endsWith(ext) && !n.endsWith(`.tmp${ext}`)).map((n) => n.slice(0, -ext.length)))
+  } catch {
+    return new Set()
+  }
+}
+
+// Hands back everything already known about each file, so Control can
+// skip re-probing it. thumbPath/convertedPath come from the cache
+// folders; duration/error/needsConversion from track-info.json. Used by
+// every handler that returns a fresh file listing to Control.
+function attachKnownInfo(files) {
+  const info = loadTrackInfo()
+  const thumbKeys = listCacheKeys(THUMBNAILS_DIR, '.jpg')
+  const convertedKeys = listCacheKeys(CONVERTED_DIR, '.mp4')
+  for (const file of files) {
+    if (thumbKeys.has(file.key)) file.thumbPath = path.join(THUMBNAILS_DIR, `${file.key}.jpg`)
+    if (convertedKeys.has(file.key)) file.convertedPath = path.join(CONVERTED_DIR, `${file.key}.mp4`)
+    const known = info[file.key]
+    if (known) {
+      file.duration = known.duration
+      file.error = known.error
+      file.needsConversion = known.needsConversion && !file.convertedPath
+      file.infoCached = true
+    }
+  }
+  return files
+}
+
 ipcMain.handle('media-folder:list', () => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   if (!settings.mediaFolder) return { files: [], prunedCount: 0, playlists: readJson(PLAYLISTS_PATH, []) }
@@ -539,6 +618,17 @@ ipcMain.handle('media-folder:list', () => {
   // wipe every folder-playlist along with the cache.
   const prunedCount = files.length > 0 ? pruneOrphanedCacheFiles(new Set(files.map((r) => r.key))) : 0
   const playlists = syncAllAutoPlaylists(files)
+
+  attachKnownInfo(files)
+  if (files.length > 0) {
+    const info = loadTrackInfo()
+    const validKeys = new Set(files.map((f) => f.key))
+    let pruned = false
+    for (const key of Object.keys(info)) {
+      if (!validKeys.has(key)) { delete info[key]; pruned = true }
+    }
+    if (pruned) scheduleTrackInfoWrite()
+  }
   return { files, prunedCount, playlists }
 })
 
@@ -553,6 +643,13 @@ function remapFileKey(oldKey, newKey) {
   for (const [dir, ext] of [[THUMBNAILS_DIR, '.jpg'], [CONVERTED_DIR, '.mp4']]) {
     const oldPath = path.join(dir, `${oldKey}${ext}`)
     if (fs.existsSync(oldPath)) fs.renameSync(oldPath, path.join(dir, `${newKey}${ext}`))
+  }
+
+  const info = loadTrackInfo()
+  if (info[oldKey]) {
+    info[newKey] = info[oldKey]
+    delete info[oldKey]
+    scheduleTrackInfoWrite()
   }
 
   const metadata = readJson(METADATA_PATH, {})
@@ -637,7 +734,7 @@ ipcMain.handle('library:sort-unsorted-by-decade', () => {
   // Re-scan for the real, final state (new folders now exist on disk) and
   // let the existing folder-playlist sync pick up the newly-created decade
   // folders exactly like any other folder a person made by hand.
-  const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
+  const rescannedFiles = attachKnownInfo(walkVideoFiles(mediaFolder, mediaFolder))
   const playlists = syncAllAutoPlaylists(rescannedFiles)
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
@@ -670,7 +767,7 @@ ipcMain.handle('library:move-file-to-folder', (_event, sourcePath, folderPath) =
   const stat = fs.statSync(resolvedSource)
   const newKey = moveFileTo(resolvedSource, stat.size, destDir)
 
-  const rescannedFiles = walkVideoFiles(mediaFolder, mediaFolder)
+  const rescannedFiles = attachKnownInfo(walkVideoFiles(mediaFolder, mediaFolder))
   const playlists = syncAllAutoPlaylists(rescannedFiles)
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
@@ -728,6 +825,9 @@ ipcMain.handle('library:reset-all', () => {
   writeJson(PLAYLISTS_PATH, [])
   writeJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
   writeJson(METADATA_PATH, {})
+  if (trackInfoWriteTimer) { clearTimeout(trackInfoWriteTimer); trackInfoWriteTimer = null }
+  trackInfo = {}
+  writeJson(TRACK_INFO_PATH, {})
   fs.rmSync(THUMBNAILS_DIR, { recursive: true, force: true })
   fs.rmSync(CONVERTED_DIR, { recursive: true, force: true })
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}), mediaFolder: '' }
@@ -773,6 +873,9 @@ function purgeDerivedState(key) {
   const metadata = readJson(METADATA_PATH, {})
   delete metadata[key]
   writeJson(METADATA_PATH, metadata)
+
+  const info = loadTrackInfo()
+  if (info[key]) { delete info[key]; scheduleTrackInfoWrite() }
 
   const playlists = readJson(PLAYLISTS_PATH, []).map((p) => ({
     ...p,
@@ -1141,6 +1244,7 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  flushTrackInfo()
   stopWatchingMediaFolder()
 })
 

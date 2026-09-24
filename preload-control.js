@@ -44,6 +44,8 @@ contextBridge.exposeInMainWorld('jukebox', {
   // Thumbnails (generated in this renderer via <video>+<canvas>, saved via main)
   saveThumbnail: (key, dataUrl) => ipcRenderer.invoke('thumbnails:save', key, dataUrl),
   getThumbnailPath: (key) => ipcRenderer.invoke('thumbnails:get-path', key),
+  // Remembers a probed duration/playability so the next launch can skip it
+  saveTrackInfo: (key, info) => ipcRenderer.invoke('track-info:save', key, info),
 
   // Format conversion (bundled ffmpeg, runs in main - see convert:run)
   getConvertedPath: (key) => ipcRenderer.invoke('convert:get-path', key),
