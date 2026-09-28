@@ -54,6 +54,16 @@
       <div class="panel-title"><h1>Queue</h1>
         <div class="button-row"><button class="danger" id="clear-queue-btn">Clear Queue</button></div>
       </div>
+      <div class="requests-bar" id="requests-bar">
+        <label class="toggle-row">
+          <span><b>Song requests</b> <span class="eyebrow" id="requests-summary">Off</span></span>
+          <span class="toggle-switch">
+            <input id="requests-toggle" type="checkbox" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </span>
+        </label>
+        <button class="secondary" id="clear-requests-btn" hidden>Clear waiting requests</button>
+      </div>
       <ol id="queue-list" class="queue-list"></ol>
     </section>
 
@@ -116,6 +126,22 @@
           <p class="eyebrow">Videos converted before this was switched on still have two copies. This moves each converted copy onto the media drive and sends its original to the Recycle Bin. Best done while the bar is closed - it can take a while.</p>
           <div class="button-row"><button class="secondary" id="replace-originals-btn">Tidy Up Converted Videos…</button></div>
           <p id="replace-originals-status" class="message"></p>
+        </div>
+
+        <div class="settings-card">
+          <h2>Song request screens</h2>
+          <p class="eyebrow" style="margin-top:0">A touch screen anywhere in the club (the other PC, a tablet) can let people add songs to the queue. Only screens set up here can use it. Switch requests on and off on the Queue tab.</p>
+          <div id="requests-devices" class="web-ads-list"></div>
+          <div class="button-row"><button class="primary" id="pair-screen-btn">Set up a touch screen</button></div>
+          <div id="pairing-box" class="pairing-box" hidden>
+            <p>On the touch screen, open this address in the browser:</p>
+            <p class="pairing-address" id="pairing-address"></p>
+            <p>then enter this code:</p>
+            <p class="pairing-code" id="pairing-code"></p>
+            <p class="eyebrow" id="pairing-expiry"></p>
+            <div class="button-row"><button class="secondary" id="cancel-pairing-btn">Done</button></div>
+          </div>
+          <p id="requests-message" class="message"></p>
         </div>
 
         <div class="settings-card danger-zone">

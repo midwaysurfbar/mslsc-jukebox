@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pick a Song</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow:wght@500;600;700;800&family=Monoton&family=Special+Elite&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Set up (first use of this screen only) -->
+<section id="pair" class="screen" hidden>
+  <div class="pair-card">
+    <h1>Set up this screen</h1>
+    <p>On the Jukebox PC: <b>Settings → Song request screens → Set up a touch screen</b>, then enter the code it shows.</p>
+    <div class="code" id="pair-code" aria-live="polite"></div>
+    <div class="keypad" id="pair-keypad"></div>
+    <p class="pair-msg" id="pair-msg" role="status"></p>
+  </div>
+</section>
+
+<!-- The song picker -->
+<section id="main" class="screen" hidden>
+  <header class="top">
+    <p class="brand">Midway Jukebox</p>
+    <div class="now">
+      <span class="label">Now playing</span>
+      <strong id="now-title">—</strong>
+      <span id="now-artist"></span>
+    </div>
+    <div class="side">
+      <div class="pill" id="state-pill"></div>
+      <div class="next" id="up-next"></div>
+    </div>
+  </header>
+
+  <div class="banner" id="full-banner" hidden>The queue is full right now – please wait a few minutes, then pick your song.</div>
+
+  <div class="tools">
+    <button class="search" id="search-btn" type="button"><span id="search-text">Search songs or artists</span></button>
+    <div class="chips" id="decades"></div>
+  </div>
+  <div class="letters" id="letters"></div>
+
+  <div class="grid" id="grid"></div>
+  <div id="more"></div>
+  <p class="empty" id="empty" hidden>No songs match that – try another search.</p>
+</section>
+
+<!-- On-screen keyboard -->
+<div class="keyboard" id="keyboard" hidden>
+  <div class="kb-bar"><span id="kb-preview"></span><button type="button" class="kb-done" id="kb-done">Done</button></div>
+  <div id="kb-keys"></div>
+</div>
+
+<!-- Messages -->
+<div class="toast" id="toast" role="status" hidden></div>
+
+<!-- Closed / idle -->
+<section id="closed" class="overlay" hidden>
+  <div>
+    <h1>Requests are closed</h1>
+    <p>Enjoy the music!</p>
+    <p class="overlay-now" id="closed-now"></p>
+  </div>
+</section>
+<section id="idle" class="overlay idle" hidden>
+  <div>
+    <h1>Pick a song</h1>
+    <p>Tap anywhere to choose what plays next</p>
+    <p class="overlay-now" id="idle-now"></p>
+  </div>
+</section>
+<section id="offline" class="overlay" hidden>
+  <div>
+    <h1>Can't reach the Jukebox</h1>
+    <p>Trying again…</p>
+  </div>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -74,6 +74,17 @@ contextBridge.exposeInMainWorld('jukebox', {
   playerSetCrossfadeDuration: (seconds) => ipcRenderer.send('player:set-crossfade-duration', seconds),
   playerSetVolume: (volume) => ipcRenderer.send('player:set-volume', volume),
 
+  // Patron song requests (see requests.js)
+  getRequestsState: () => ipcRenderer.invoke('requests:get-state'),
+  setRequestsEnabled: (enabled) => ipcRenderer.invoke('requests:set-enabled', enabled),
+  startRequestPairing: () => ipcRenderer.invoke('requests:start-pairing'),
+  cancelRequestPairing: () => ipcRenderer.invoke('requests:cancel-pairing'),
+  removeRequestDevice: (id) => ipcRenderer.invoke('requests:remove-device', id),
+  onRequestsState: (callback) => ipcRenderer.on('requests:state', (_event, state) => callback(state)),
+  onRequestIncoming: (callback) => ipcRenderer.on('requests:incoming', (_event, payload) => callback(payload)),
+  replyRequest: (id, result) => ipcRenderer.send('requests:reply', { id, result }),
+  sendRequestStatus: (snapshot) => ipcRenderer.send('requests:status', snapshot),
+
   // Player state (relayed back from the Display window)
   onPlayerState: (callback) => ipcRenderer.on('player:state', (_event, state) => callback(state)),
 

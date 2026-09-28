@@ -996,6 +996,15 @@ async function playNow(key) {
 async function addToQueue(key) {
   queue.tracks.push(key)
   await saveAndSyncQueue()
+  sendQueueToDisplay()
+}
+
+// Hands Display the current track list without touching playback (same as
+// Shuffle). Adding to the end, or moving/removing something still to come,
+// used to only update this window's list - Display kept playing its own old
+// copy, so a song added with "+ Queue" mid-song never actually played.
+function sendQueueToDisplay() {
+  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
 }
 
 // Whole library, shuffled - excludes anything still needing conversion,
@@ -1010,6 +1019,7 @@ document.getElementById('add-all-queue-btn').addEventListener('click', async () 
   }
   queue.tracks.push(...keys)
   await saveAndSyncQueue()
+  sendQueueToDisplay()
 })
 
 document.getElementById('clear-queue-btn').addEventListener('click', async () => {
@@ -1071,6 +1081,7 @@ function renderQueue() {
       <li class="queue-row ${isNowPlaying ? 'now-playing' : ''}">
         <span class="queue-index">${i + 1}</span>
         <span style="flex:1">${track.filename}</span>
+        ${requestedKeys.has(key) && i >= queue.currentIndex ? '<span class="request-tag">Request</span>' : ''}
         <span>${fmtTime(track.duration)}</span>
         <div class="button-row">
           <button class="secondary" data-move-up="${i}">↑</button>
@@ -1085,6 +1096,7 @@ function renderQueue() {
   list.querySelectorAll('[data-move-down]').forEach((el) => el.addEventListener('click', () => moveQueueItem(Number(el.dataset.moveDown), 1)))
   list.querySelectorAll('[data-remove-idx]').forEach((el) => el.addEventListener('click', () => removeQueueItem(Number(el.dataset.removeIdx))))
   list.querySelectorAll('[data-play-from]').forEach((el) => el.addEventListener('click', () => playQueueFrom(Number(el.dataset.playFrom))))
+  pushRequestStatus()
 }
 
 async function moveQueueItem(index, direction) {
@@ -1093,10 +1105,13 @@ async function moveQueueItem(index, direction) {
   const [item] = queue.tracks.splice(index, 1)
   queue.tracks.splice(target, 0, item)
   await saveAndSyncQueue()
+  // only songs still to come - moving the one on screen stays as it was
+  if (Math.min(index, target) > queue.currentIndex) sendQueueToDisplay()
 }
 async function removeQueueItem(index) {
   queue.tracks.splice(index, 1)
   await saveAndSyncQueue()
+  if (index > queue.currentIndex) sendQueueToDisplay()
 }
 async function playQueueFrom(index) {
   queue.currentIndex = index
@@ -1331,6 +1346,191 @@ jukebox.onPlayerState((state) => {
   if (queueSignature() !== lastQueueSignature) renderQueue()
 })
 
+// --- Song requests (patron touch screen - see requests.js) ---
+//
+// The rules are checked here because this window owns the queue: a request
+// joins the END of the queue like any song added here, only while fewer
+// than 20 are waiting, never while the same song is waiting or playing, and
+// not within 10 minutes of it last playing. Staff adding songs here are
+// never limited. Nothing in this section runs unless a request comes in.
+
+const requestedKeys = new Map() // key -> when requested (for the "Request" tag)
+const lastStarted = new Map()   // key -> when it last started playing
+let lastStartedKey = null
+let requestsState = null
+
+function guessName(filename) {
+  let name = filename.replace(/\.[^.]+$/, '')
+  name = name.replace(/[\[(].*?(official|video|hd|lyrics|audio|4k|hq).*?[\])]/gi, '')
+  name = name.replace(/^\s*\d+[\s._-]+/, '').replace(/[_]+/g, ' ').trim()
+  const parts = name.split(/\s*-\s*/)
+  return parts.length >= 2 ? { artist: parts[0].trim(), title: parts.slice(1).join(' - ').trim() } : { artist: '', title: name }
+}
+function describeTrack(key) {
+  const track = trackByKey(key)
+  if (!track) return null
+  const guess = guessName(track.filename)
+  const meta = metadataCache[key]
+  return { title: guess.title, artist: meta && meta.artist && meta.artist !== 'Unknown' ? meta.artist : guess.artist }
+}
+// Index of the first song still to come (after whatever is on screen, or
+// finished last).
+function firstUpcomingIndex() {
+  return lastPlayerState && lastPlayerState.currentTrack ? queue.currentIndex + 1 : queue.currentIndex
+}
+function playingKey() {
+  return lastPlayerState && lastPlayerState.status !== 'idle' && lastPlayerState.currentTrack ? lastPlayerState.currentTrack.key : null
+}
+
+// What the picker shows: now playing, the next few, and how many are waiting.
+let lastRequestStatus = ''
+function pushRequestStatus() {
+  const waiting = queue.tracks.slice(firstUpcomingIndex())
+  const snapshot = {
+    nowPlaying: playingKey() ? describeTrack(playingKey()) : null,
+    upNext: waiting.slice(0, 3).map(describeTrack).filter(Boolean),
+    waiting: waiting.length,
+  }
+  const sig = JSON.stringify(snapshot)
+  if (sig === lastRequestStatus) return
+  lastRequestStatus = sig
+  jukebox.sendRequestStatus(snapshot)
+  renderRequestsUi()
+}
+
+async function handleSongRequest(key, maxWaiting, repeatMinutes) {
+  const track = trackByKey(key)
+  if (!track || track.needsConversion || track.error) return { ok: false, reason: 'unavailable' }
+  const start = firstUpcomingIndex()
+  const waiting = queue.tracks.slice(start)
+  if (waiting.length >= maxWaiting) return { ok: false, reason: 'full' }
+  if (waiting.includes(key) || playingKey() === key) return { ok: false, reason: 'queued' }
+  const last = lastStarted.get(key)
+  const waitMs = last ? last + repeatMinutes * 60000 - Date.now() : 0
+  if (waitMs > 0) return { ok: false, reason: 'recent', minutes: Math.ceil(waitMs / 60000) }
+
+  queue.tracks.push(key)
+  requestedKeys.set(key, Date.now())
+  await jukebox.saveQueue(queue)
+  // Nothing on screen (the queue had finished, or never started): start
+  // with the request. Paused by staff: leave it paused, just add it.
+  if (!lastPlayerState || lastPlayerState.status === 'idle') await playQueueFrom(start)
+  else sendQueueToDisplay()
+  renderQueue()
+  return { ok: true, position: waiting.length + 1 }
+}
+
+jukebox.onRequestIncoming(async ({ id, key, maxWaiting, repeatMinutes }) => {
+  let result
+  try { result = await handleSongRequest(key, maxWaiting, repeatMinutes) } catch { result = { ok: false, reason: 'busy' } }
+  jukebox.replyRequest(id, result)
+})
+
+// Remember when each song starts, for the 10-minute rule; its "Request"
+// tag comes off once it's playing.
+jukebox.onPlayerState((state) => {
+  const key = state.status === 'playing' && state.currentTrack ? state.currentTrack.key : null
+  if (key && key !== lastStartedKey) {
+    lastStartedKey = key
+    lastStarted.set(key, Date.now())
+    requestedKeys.delete(key)
+    pushRequestStatus()
+  } else if (!key && state.status === 'idle') {
+    lastStartedKey = null
+    pushRequestStatus()
+  }
+})
+
+// ---- Requests on/off switch + touch screen set-up ----
+const requestsToggle = document.getElementById('requests-toggle')
+function waitingRequestIndexes() {
+  const start = firstUpcomingIndex()
+  const out = []
+  queue.tracks.forEach((k, i) => { if (i >= start && requestedKeys.has(k)) out.push(i) })
+  return out
+}
+function timeAgo(ms) {
+  if (!ms) return 'not used yet'
+  const mins = Math.round((Date.now() - ms) / 60000)
+  if (mins < 2) return 'in use now'
+  if (mins < 60) return `last used ${mins} min ago`
+  const hours = Math.round(mins / 60)
+  return hours < 48 ? `last used ${hours} h ago` : `last used ${new Date(ms).toLocaleDateString()}`
+}
+function renderRequestsUi() {
+  const st = requestsState
+  if (!st) return
+  requestsToggle.checked = st.enabled
+  const waiting = queue.tracks.slice(firstUpcomingIndex()).length
+  const requests = waitingRequestIndexes().length
+  document.getElementById('requests-summary').textContent = !st.enabled
+    ? 'Off - the song picker is closed. Songs added here aren\'t limited.'
+    : `On - ${Math.min(waiting, st.maxWaiting)} of ${st.maxWaiting} places used${waiting >= st.maxWaiting ? ' (full - the picker says please wait)' : ''}${requests ? ` · ${requests} request${requests === 1 ? '' : 's'} waiting` : ''}${st.devices.length ? '' : ' · no touch screen set up yet (see Settings)'}`
+  document.getElementById('clear-requests-btn').hidden = !requests
+
+  const list = document.getElementById('requests-devices')
+  list.innerHTML = st.devices.length
+    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${d.name}</b> · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${d.id}">Remove</button></div>`).join('')
+    : '<p class="eyebrow" style="margin:0">No touch screens set up yet.</p>'
+  list.querySelectorAll('[data-remove-device]').forEach((el) => el.addEventListener('click', async () => {
+    if (!confirm('Remove this touch screen? It will need setting up again to take requests.')) return
+    requestsState = await jukebox.removeRequestDevice(el.dataset.removeDevice)
+    renderRequestsUi()
+  }))
+
+  const box = document.getElementById('pairing-box')
+  box.hidden = !st.pairing
+  if (st.pairing) {
+    const address = st.addresses.find((a) => /\/\/(192\.168|10\.|172\.)/.test(a)) || st.addresses[0] || `http://<this PC's address>:${st.port}`
+    document.getElementById('pairing-address').textContent = address
+    document.getElementById('pairing-code').textContent = st.pairing.code
+    const mins = Math.max(0, Math.ceil((st.pairing.expiresAt - Date.now()) / 60000))
+    document.getElementById('pairing-expiry').textContent = `This code works for ${mins} more minute${mins === 1 ? '' : 's'}.`
+  }
+  document.getElementById('requests-message').textContent = st.serverError || ''
+}
+async function refreshRequestsState() {
+  try {
+    requestsState = await jukebox.getRequestsState()
+    renderRequestsUi()
+  } catch {
+    // The request feature didn't load - hide its controls; the Jukebox itself is unaffected.
+    document.getElementById('requests-bar').hidden = true
+  }
+}
+requestsToggle.addEventListener('change', async () => {
+  try {
+    requestsState = await jukebox.setRequestsEnabled(requestsToggle.checked)
+  } catch (err) {
+    requestsToggle.checked = !requestsToggle.checked
+  }
+  renderRequestsUi()
+})
+document.getElementById('clear-requests-btn').addEventListener('click', async () => {
+  const drop = new Set(waitingRequestIndexes())
+  if (!drop.size || !confirm(`Remove the ${drop.size} waiting request${drop.size === 1 ? '' : 's'} from the queue?`)) return
+  queue.tracks = queue.tracks.filter((_, i) => !drop.has(i))
+  requestedKeys.clear()
+  await saveAndSyncQueue()
+  sendQueueToDisplay()
+})
+document.getElementById('pair-screen-btn').addEventListener('click', async () => {
+  requestsState = await jukebox.startRequestPairing()
+  renderRequestsUi()
+})
+document.getElementById('cancel-pairing-btn').addEventListener('click', async () => {
+  requestsState = await jukebox.cancelRequestPairing()
+  renderRequestsUi()
+})
+jukebox.onRequestsState((state) => {
+  const newDevice = requestsState && state.devices.length > requestsState.devices.length
+  requestsState = state
+  renderRequestsUi()
+  if (newDevice) document.getElementById('requests-message').textContent = `${state.devices[state.devices.length - 1].name} is set up and ready.`
+})
+// keep the code's "minutes left" and each screen's "last used" current
+setInterval(renderRequestsUi, 30000)
+
 // --- Software update (Settings tab) ---
 
 document.getElementById('check-update-btn').addEventListener('click', async () => {
@@ -1378,6 +1578,8 @@ async function init() {
   // that trackByKey can actually resolve the persisted queue's tracks.
   renderQueue()
   resumeQueueOnDisplay()
+  refreshRequestsState()
+  pushRequestStatus()
   document.getElementById('app-version').textContent = await jukebox.getAppVersion()
 }
 init()

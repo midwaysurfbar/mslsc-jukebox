@@ -47,6 +47,9 @@ const FFMPEG_PATH = app.isPackaged
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.webm', '.mkv', '.mov', '.m4v', '.avi', '.wmv'])
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'])
 
+// Development/testing only: JUKEBOX_USER_DATA points the app at a separate
+// data folder, so a test run never touches the real library/queue/settings.
+if (process.env.JUKEBOX_USER_DATA) app.setPath('userData', process.env.JUKEBOX_USER_DATA)
 const USER_DATA = app.getPath('userData')
 const SETTINGS_PATH = path.join(USER_DATA, 'settings.json')
 const PLAYLISTS_PATH = path.join(USER_DATA, 'playlists.json')
@@ -487,6 +490,7 @@ function stopWatchingMediaFolder() {
 function notifyMediaFolderChanged() {
   if (mediaRescanDebounce) clearTimeout(mediaRescanDebounce)
   mediaRescanDebounce = setTimeout(() => {
+    if (requests) requests.invalidateLibrary()
     if (controlWindow) controlWindow.webContents.send('media-folder:changed')
   }, 400)
 }
@@ -1211,6 +1215,50 @@ ipcMain.handle('metadata:set-manual', (_event, key, entry) => {
   return { entry: cache[key], playlists }
 })
 
+// --- Patron song requests (see requests.js) ---
+//
+// The picker's song list: every video Display can actually play, named the
+// way people know it - the tagged/looked-up artist when there is one,
+// otherwise the "Artist - Title" guessed from the filename - with its decade
+// from the tags or a decade folder ("1980s"). Short keys keep the list small
+// for ~2,500 songs.
+function listRequestLibrary() {
+  const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
+  if (!settings.mediaFolder) return []
+  const files = attachKnownInfo(walkVideoFiles(settings.mediaFolder, settings.mediaFolder))
+  const metadata = readJson(METADATA_PATH, {})
+  const out = []
+  for (const f of files) {
+    if (f.error || f.needsConversion) continue
+    const meta = metadata[f.key] || {}
+    const guess = guessArtistTitle(f.filename)
+    const artist = meta.artist && meta.artist !== 'Unknown' ? meta.artist : guess.artist
+    const folderDecade = (f.folder.split('/')[0].match(/^(\d{4})s$/) || [])[1]
+    const decade = meta.decade && meta.decade !== 'Unknown' ? meta.decade : folderDecade ? `${folderDecade}s` : ''
+    out.push({ k: f.key, t: guess.title || f.filename, a: artist || '', d: decade, th: Boolean(f.thumbPath) })
+  }
+  out.sort((x, y) => x.t.localeCompare(y.t, undefined, { sensitivity: 'base' }))
+  return out
+}
+
+let requests = null
+function startRequests() {
+  try {
+    requests = require('./requests')({
+      ipcMain,
+      getControlWindow: () => controlWindow,
+      userData: USER_DATA,
+      thumbnailsDir: THUMBNAILS_DIR,
+      readJson,
+      writeJson,
+      listLibrary: listRequestLibrary,
+    })
+  } catch (err) {
+    // Requests are an extra - nothing about playing videos depends on them.
+    console.error('[requests] could not start', err)
+  }
+}
+
 // --- IPC: player command/state relay between the two windows ---
 
 const PLAYER_COMMANDS = ['load-queue', 'update-queue', 'play', 'pause', 'toggle-play-pause', 'skip', 'previous', 'seek', 'set-crossfade-duration', 'set-volume']
@@ -1370,6 +1418,7 @@ app.whenReady().then(() => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   startWatchingMediaFolder(settings.mediaFolder)
   startSyncingWebAds()
+  startRequests()
 })
 
 app.on('before-quit', () => {
