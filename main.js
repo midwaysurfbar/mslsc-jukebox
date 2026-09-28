@@ -125,7 +125,15 @@ function callJukeboxAdsFn(body) {
 // internet, function unreachable) is never fatal - whatever's already
 // downloaded keeps working exactly as before, same principle as every
 // other "best-effort background sync" in this app.
-async function syncWebAds() {
+let webAdsSyncing = null
+function syncWebAds() {
+  // A manual "sync now" landing while the 2-minute background pass is
+  // still downloading shares that pass instead of starting a second one.
+  if (!webAdsSyncing) webAdsSyncing = syncWebAdsOnce().finally(() => { webAdsSyncing = null })
+  return webAdsSyncing
+}
+
+async function syncWebAdsOnce() {
   let files
   try {
     // 'jukebox' scopes this to ads the shared Ad Manager has actually
@@ -133,7 +141,10 @@ async function syncWebAds() {
     // Menu board would still get downloaded and played here too.
     const data = await callJukeboxAdsFn({ action: 'list', target: 'jukebox' })
     if (!data.ok) throw new Error(data.error || 'Could not list web ads.')
-    files = data.files
+    // Names come from the Ad Manager, which already makes them safe - but
+    // they become file names here, so anything that isn't a plain file
+    // name (a folder part, "..") is ignored rather than trusted.
+    files = (data.files || []).filter((f) => typeof f.path === 'string' && f.path && path.basename(f.path) === f.path && f.path !== '..')
   } catch (err) {
     return { ok: false, error: err.message }
   }
@@ -180,9 +191,33 @@ function readJson(filePath, fallback) {
   }
 }
 
+// Written to a temp file first and then renamed over the real one, so a
+// power cut or crash mid-write can never leave a half-written file behind
+// (code review 2026-09-29). A torn playlists.json used to read back as
+// "no playlists" - and the next save would have made that permanent.
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(value))
+  const tempPath = `${filePath}.${process.pid}.tmp`
+  fs.writeFileSync(tempPath, JSON.stringify(value))
+  try {
+    fs.renameSync(tempPath, filePath)
+  } catch {
+    // Windows can briefly refuse the rename while something (an antivirus
+    // scan, a backup tool) has the file open - fall back to a plain write.
+    fs.writeFileSync(filePath, JSON.stringify(value))
+    try { fs.rmSync(tempPath, { force: true }) } catch { /* harmless leftover */ }
+  }
+}
+
+// Cache keys are always an md5 hex string (see fileKey below). Every IPC
+// handler that builds a file path from a key checks it first, so a bad
+// key can never point a write or delete outside the cache folders.
+function isFileKey(key) {
+  return typeof key === 'string' && /^[a-f0-9]{32}$/.test(key)
+}
+function requireFileKey(key) {
+  if (!isFileKey(key)) throw new Error('Invalid track key.')
+  return key
 }
 
 // Deliberately NOT keyed on mtime - copying files onto the PC (from a
@@ -236,6 +271,20 @@ function walkVideoFiles(dir, root, results = []) {
     }
   }
   return results
+}
+
+// The most recent full scan, kept so the song picker's list can be built
+// from it instead of walking the whole media folder again (~2,500 files,
+// possibly over the network) on the main process - which also relays every
+// play/skip command to the TV, so a long walk there stalls those. Every
+// whole-library scan goes through here, so it's never older than the last
+// thing this app did to the folder.
+let lastScan = null // { folder, files }
+function scanMediaFolder(mediaFolder) {
+  const files = walkVideoFiles(mediaFolder, mediaFolder)
+  lastScan = { folder: mediaFolder, files: files.map((f) => ({ ...f })) }
+  if (requests) requests.invalidateLibrary()
+  return files
 }
 
 // Auto-creates/syncs one playlist per subfolder actually found under the
@@ -393,6 +442,7 @@ let displayWindow = null
 let tray = null
 let isQuitting = false
 let updateReady = false
+let displayHasLoaded = false
 
 function createControlWindow() {
   controlWindow = new BrowserWindow({
@@ -447,6 +497,19 @@ function createDisplayWindow() {
   })
   displayWindow.loadFile(path.join(__dirname, 'display', 'index.html'))
   if (process.env.JUKEBOX_DEBUG) displayWindow.webContents.openDevTools({ mode: 'detach' })
+
+  // If the TV's page crashes (a bad video can take the renderer down), load
+  // it again rather than leaving a frozen or black screen at the bar. Any
+  // reload after the very first one - this, or a window rebuilt by "Show on
+  // TV" - asks Control to hand the queue back, so the music carries on.
+  displayWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('[display] renderer gone:', details.reason)
+    if (details.reason !== 'clean-exit' && displayWindow && !displayWindow.isDestroyed()) displayWindow.reload()
+  })
+  displayWindow.webContents.on('did-finish-load', () => {
+    if (displayHasLoaded && controlWindow && !controlWindow.isDestroyed()) controlWindow.webContents.send('display:restarted')
+    displayHasLoaded = true
+  })
 
   displayWindow.on('close', (event) => {
     if (isQuitting) return
@@ -591,7 +654,7 @@ function flushTrackInfo() {
 }
 
 ipcMain.handle('track-info:save', (_event, key, info) => {
-  loadTrackInfo()[key] = {
+  loadTrackInfo()[requireFileKey(key)] = {
     duration: Number(info.duration) || 0,
     error: Boolean(info.error),
     needsConversion: Boolean(info.needsConversion),
@@ -635,7 +698,7 @@ function attachKnownInfo(files) {
 ipcMain.handle('media-folder:list', () => {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   if (!settings.mediaFolder) return { files: [], prunedCount: 0, playlists: readJson(PLAYLISTS_PATH, []) }
-  const files = walkVideoFiles(settings.mediaFolder, settings.mediaFolder)
+  const files = scanMediaFolder(settings.mediaFolder)
   // Both of these are guarded on a non-empty scan for the same reason -
   // a media folder that's temporarily unreachable (drive unplugged,
   // network share down) must never be read as "everything's gone" and
@@ -750,7 +813,7 @@ ipcMain.handle('library:sort-unsorted-by-decade', () => {
   const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
   if (!mediaFolder) return { moved: 0, skipped: 0, movedKeys: {}, files: [], playlists: readJson(PLAYLISTS_PATH, []), queue: readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 }) }
 
-  const files = walkVideoFiles(mediaFolder, mediaFolder)
+  const files = scanMediaFolder(mediaFolder)
   const metadata = readJson(METADATA_PATH, {})
   const movedKeys = {} // oldKey -> newKey, so Control can update just the tracks that actually moved
   let moved = 0
@@ -768,7 +831,7 @@ ipcMain.handle('library:sort-unsorted-by-decade', () => {
   // Re-scan for the real, final state (new folders now exist on disk) and
   // let the existing folder-playlist sync pick up the newly-created decade
   // folders exactly like any other folder a person made by hand.
-  const rescannedFiles = attachKnownInfo(walkVideoFiles(mediaFolder, mediaFolder))
+  const rescannedFiles = attachKnownInfo(scanMediaFolder(mediaFolder))
   const playlists = syncAllAutoPlaylists(rescannedFiles)
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
@@ -801,7 +864,7 @@ ipcMain.handle('library:move-file-to-folder', (_event, sourcePath, folderPath) =
   const stat = fs.statSync(resolvedSource)
   const newKey = moveFileTo(resolvedSource, stat.size, destDir)
 
-  const rescannedFiles = attachKnownInfo(walkVideoFiles(mediaFolder, mediaFolder))
+  const rescannedFiles = attachKnownInfo(scanMediaFolder(mediaFolder))
   const playlists = syncAllAutoPlaylists(rescannedFiles)
   const prunedCount = rescannedFiles.length > 0 ? pruneOrphanedCacheFiles(new Set(rescannedFiles.map((r) => r.key))) : 0
   const queue = readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 })
@@ -927,6 +990,7 @@ function purgeDerivedState(key) {
 }
 
 ipcMain.handle('library:delete-file', (_event, key, filePath) => {
+  requireFileKey(key)
   const resolved = resolveInsideMediaFolder(filePath)
   if (!resolved) throw new Error('Refusing to delete a file outside the configured media folder.')
   fs.rmSync(resolved, { force: true })
@@ -942,6 +1006,7 @@ ipcMain.handle('library:delete-file', (_event, key, filePath) => {
 // specific file first, so it goes to the Recycle Bin rather than a
 // permanent delete, in case it's ever wrong about a fixable file.
 ipcMain.handle('library:trash-unplayable-file', async (_event, key, filePath) => {
+  requireFileKey(key)
   const resolved = resolveInsideMediaFolder(filePath)
   if (!resolved) throw new Error('Refusing to remove a file outside the configured media folder.')
   await shell.trashItem(resolved)
@@ -989,6 +1054,7 @@ function probeDuration(filePath) {
 }
 
 ipcMain.handle('convert:replace-original', async (_event, key, sourcePath) => {
+  requireFileKey(key)
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   const mediaFolder = settings.mediaFolder
   if (!mediaFolder || isNetworkPath(mediaFolder)) return { replaced: false, reason: 'network' }
@@ -1038,7 +1104,7 @@ ipcMain.handle('convert:replace-original', async (_event, key, sourcePath) => {
   info[newKey] = { duration: convertedLength, error: false, needsConversion: false }
   scheduleTrackInfoWrite()
 
-  const files = attachKnownInfo(walkVideoFiles(mediaFolder, mediaFolder))
+  const files = attachKnownInfo(scanMediaFolder(mediaFolder))
   const playlists = syncAllAutoPlaylists(files)
   return { replaced: true, newKey, files, playlists, queue: readJson(QUEUE_PATH, { tracks: [], currentIndex: 0 }) }
 })
@@ -1051,6 +1117,7 @@ ipcMain.handle('convert:can-replace-originals', () => {
 // --- IPC: thumbnails (generated client-side in Control via <video>+<canvas>, saved here) ---
 
 ipcMain.handle('thumbnails:save', (_event, key, dataUrl) => {
+  requireFileKey(key)
   fs.mkdirSync(THUMBNAILS_DIR, { recursive: true })
   const filePath = path.join(THUMBNAILS_DIR, `${key}.jpg`)
   const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '')
@@ -1058,6 +1125,7 @@ ipcMain.handle('thumbnails:save', (_event, key, dataUrl) => {
   return filePath
 })
 ipcMain.handle('thumbnails:get-path', (_event, key) => {
+  if (!isFileKey(key)) return null
   const filePath = path.join(THUMBNAILS_DIR, `${key}.jpg`)
   return fs.existsSync(filePath) ? filePath : null
 })
@@ -1069,6 +1137,7 @@ ipcMain.handle('thumbnails:get-path', (_event, key) => {
 // thumbnails, so it only ever needs converting once per file.
 
 ipcMain.handle('convert:get-path', (_event, key) => {
+  if (!isFileKey(key)) return null
   const filePath = path.join(CONVERTED_DIR, `${key}.mp4`)
   return fs.existsSync(filePath) ? filePath : null
 })
@@ -1081,6 +1150,7 @@ ipcMain.handle('convert:get-path', (_event, key) => {
 const CONVERT_TIMEOUT_MS = 10 * 60 * 1000
 
 ipcMain.handle('convert:run', (_event, key, sourcePath) => {
+  requireFileKey(key)
   return new Promise((resolve, reject) => {
     fs.mkdirSync(CONVERTED_DIR, { recursive: true })
     const outputPath = path.join(CONVERTED_DIR, `${key}.mp4`)
@@ -1189,8 +1259,12 @@ ipcMain.handle('metadata:lookup', async (_event, key, filename) => {
           confidence: artist ? 'high' : 'low',
         }
       : { artist: artist || 'Unknown', genre: 'Unknown', decade: 'Unknown', confidence: 'none' }
-    cache[key] = entry
-    writeJson(METADATA_PATH, cache)
+    // Re-read just before writing: this await can take a while, and a tag
+    // saved by hand (or another lookup) in the meantime must not be lost.
+    const latest = readJson(METADATA_PATH, {})
+    if (latest[key]) return latest[key]
+    latest[key] = entry
+    writeJson(METADATA_PATH, latest)
     return entry
   } catch {
     // Offline or the API's unreachable - leave uncached so it's retried
@@ -1210,7 +1284,7 @@ ipcMain.handle('metadata:set-manual', (_event, key, entry) => {
 
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   const mediaFolder = settings.mediaFolder ? path.resolve(settings.mediaFolder) : ''
-  const playlists = mediaFolder ? syncArtistPlaylists(walkVideoFiles(mediaFolder, mediaFolder)) : readJson(PLAYLISTS_PATH, [])
+  const playlists = mediaFolder ? syncArtistPlaylists(scanMediaFolder(mediaFolder)) : readJson(PLAYLISTS_PATH, [])
 
   return { entry: cache[key], playlists }
 })
@@ -1225,7 +1299,10 @@ ipcMain.handle('metadata:set-manual', (_event, key, entry) => {
 function listRequestLibrary() {
   const settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_PATH, {}) }
   if (!settings.mediaFolder) return []
-  const files = attachKnownInfo(walkVideoFiles(settings.mediaFolder, settings.mediaFolder))
+  const scanned = lastScan && path.resolve(lastScan.folder) === path.resolve(settings.mediaFolder)
+    ? lastScan.files.map((f) => ({ ...f }))
+    : walkVideoFiles(settings.mediaFolder, settings.mediaFolder)
+  const files = attachKnownInfo(scanned)
   const metadata = readJson(METADATA_PATH, {})
   const out = []
   for (const f of files) {
@@ -1409,7 +1486,24 @@ function startSyncingWebAds() {
   setInterval(runSync, WEB_ADS_SYNC_INTERVAL_MS)
 }
 
-app.whenReady().then(() => {
+// One Jukebox per PC. Opening it again while it's already running (it
+// hides in the tray, so the desktop icon gets double-clicked) used to start
+// a second copy: a second TV window over the first, a second ad sync, and
+// two copies writing the same queue and playlists. Now the running one just
+// comes to the front.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!controlWindow || controlWindow.isDestroyed()) return
+    if (controlWindow.isMinimized()) controlWindow.restore()
+    controlWindow.show()
+    controlWindow.focus()
+  })
+  app.whenReady().then(startApp)
+}
+
+function startApp() {
   Menu.setApplicationMenu(null)
   createControlWindow()
   createDisplayWindow()
@@ -1419,7 +1513,7 @@ app.whenReady().then(() => {
   startWatchingMediaFolder(settings.mediaFolder)
   startSyncingWebAds()
   startRequests()
-})
+}
 
 app.on('before-quit', () => {
   isQuitting = true

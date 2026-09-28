@@ -279,6 +279,13 @@ async function playIndex(index) {
   }
   currentIndex = index
   const track = queue[index]
+  // A queue position whose file has gone from the library (Control sends a
+  // stand-in so positions stay lined up) - move straight past it.
+  if (track.missing || !track.path) {
+    reportState({ status: 'error', errorTrack: track, errorReason: 'the file is no longer in the library' })
+    setTimeout(() => playIndex(index + 1), 0)
+    return
+  }
   try {
     await loadDeck(activeDeck, track)
   } catch (reason) {
@@ -303,6 +310,9 @@ async function beginCrossfade() {
   if (isTransitioning) return
   const nextIndex = currentIndex + 1
   if (nextIndex >= queue.length) return // nothing to crossfade into - let it just play out and end naturally
+  // A stand-in for a missing file has nothing to fade into - let this song
+  // end naturally; playIndex then skips past the stand-in.
+  if (queue[nextIndex].missing || !queue[nextIndex].path) return
   isTransitioning = true
   // Fires (if due) right as the crossfade starts, not awaited - the ad
   // overlays on top of the crossfade in progress, it never gates it.

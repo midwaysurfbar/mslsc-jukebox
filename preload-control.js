@@ -92,6 +92,9 @@ contextBridge.exposeInMainWorld('jukebox', {
   // same effect as the tray icon's "Show on TV" item, just somewhere
   // actually visible.
   reopenDisplay: () => ipcRenderer.invoke('display:reopen'),
+  // The TV window reloaded (after a crash, or rebuilt by "Show on TV") and
+  // is empty - Control hands it the queue again.
+  onDisplayRestarted: (callback) => ipcRenderer.on('display:restarted', () => callback()),
 
   // Fires (debounced) whenever main's live filesystem watch notices a
   // change under the media folder - a new folder, added/removed/moved

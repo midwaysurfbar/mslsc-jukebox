@@ -61,6 +61,15 @@ function trackByKey(key) {
   }
   return libraryIndex.get(key)
 }
+// Every name that goes into the page as HTML - filenames, playlist and
+// folder names, artist/genre tags (some come from the iTunes lookup, i.e.
+// the internet) - is escaped first. Unescaped, a tag like "Weird Al"
+// (with its quote marks) broke the picker's option values, and this window
+// can delete and move real files, so nothing from outside may run in it.
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+}
+
 function fmtTime(seconds) {
   if (!seconds || !isFinite(seconds)) return '0:00'
   const m = Math.floor(seconds / 60)
@@ -186,6 +195,16 @@ document.getElementById('choose-folder-btn').addEventListener('click', async () 
   if (folder) { await loadSettings(); await runLibraryOp(rescanLibrary) }
 })
 
+// Sliders fire on every step of a drag. Their live effect (volume,
+// crossfade) is sent to the TV straight away, but the settings file is only
+// saved once the dragging pauses - it used to be written ~100 times per
+// drag, each one also making the TV re-read its ad folder.
+let settingsSaveTimer = null
+function saveSettingsSoon() {
+  clearTimeout(settingsSaveTimer)
+  settingsSaveTimer = setTimeout(() => jukebox.saveSettings(settings), 300)
+}
+
 document.getElementById('ads-enabled-toggle').addEventListener('change', async (e) => {
   settings.adsEnabled = e.target.checked
   await jukebox.saveSettings(settings)
@@ -195,13 +214,13 @@ document.getElementById('ads-every-slider').addEventListener('input', async (e) 
   document.getElementById('ads-every-value').textContent = n
   document.getElementById('ads-every-plural').textContent = n === 1 ? '' : 's'
   settings.adsEverySongs = n
-  await jukebox.saveSettings(settings)
+  saveSettingsSoon()
 })
 document.getElementById('ads-seconds-slider').addEventListener('input', async (e) => {
   const n = Number(e.target.value)
   document.getElementById('ads-seconds-value').textContent = n
   settings.adsSecondsPerImage = n
-  await jukebox.saveSettings(settings)
+  saveSettingsSoon()
 })
 
 document.getElementById('intro-video-enabled-toggle').addEventListener('change', async (e) => {
@@ -213,14 +232,14 @@ document.getElementById('crossfade-slider').addEventListener('input', async (e) 
   const seconds = Number(e.target.value)
   document.getElementById('crossfade-value').textContent = seconds
   settings.crossfadeSeconds = seconds
-  await jukebox.saveSettings(settings)
+  saveSettingsSoon()
   jukebox.playerSetCrossfadeDuration(seconds)
 })
 document.getElementById('volume-slider').addEventListener('input', async (e) => {
   const pct = Number(e.target.value)
   document.getElementById('volume-value').textContent = pct
   settings.volume = pct / 100
-  await jukebox.saveSettings(settings)
+  saveSettingsSoon()
   jukebox.playerSetVolume(settings.volume)
 })
 
@@ -526,8 +545,8 @@ function playlistPickerHtml(track) {
   // focused (fillPicker below). Rendering all ~170 options into every
   // one of ~2,500 tiles was ~430,000 <option>s on one page.
   return `
-    <select data-track-picker="${track.key}" data-current="${currentValue}">
-      <option value="${currentValue}" selected>${currentLabel}</option>
+    <select data-track-picker="${track.key}" data-current="${esc(currentValue)}">
+      <option value="${esc(currentValue)}" selected>${esc(currentLabel)}</option>
     </select>`
 }
 
@@ -539,7 +558,7 @@ function buildPickerContext() {
   for (const p of manualPlaylists) {
     for (const key of p.trackKeys) if (!manualByTrack.has(key)) manualByTrack.set(key, p)
   }
-  const option = (value, label) => `<option value="${value}">${label}</option>`
+  const option = (value, label) => `<option value="${esc(value)}">${esc(label)}</option>`
   // "Joining" an existing artist playlist here is just a quicker way to
   // tag this track as that same artist (setManualMetadata under the
   // hood, same as the 🏷 Tag button) - no retyping a band name that's
@@ -574,8 +593,8 @@ function renderTrackTile(track) {
     <div class="track-tile">
       <div class="track-thumb" style="${thumbStyle}">${thumbLabel}</div>
       <div class="track-info">
-        <strong title="${track.filename}">${track.filename}</strong>
-        <div class="track-meta">${fmtTime(track.duration)} · ${fmtBytes(track.size)}${meta && meta.artist !== 'Unknown' ? ` · ${meta.artist}` : ''}${track.convertedPath ? ' · converted' : ''}</div>
+        <strong title="${esc(track.filename)}">${esc(track.filename)}</strong>
+        <div class="track-meta">${fmtTime(track.duration)} · ${fmtBytes(track.size)}${meta && meta.artist !== 'Unknown' ? ` · ${esc(meta.artist)}` : ''}${track.convertedPath ? ' · converted' : ''}</div>
       </div>
       <div class="track-actions">
         ${track.needsConversion
@@ -654,8 +673,8 @@ function renderLibrary({ reset = false } = {}) {
     if (groupFilter && !groups.has(groupFilter)) groupFilter = null
 
     if (groupFilter) {
-      entries.push({ html: () => `<button class="secondary" data-clear-group-filter>← Show every ${groupBy}</button>` })
-      entries.push({ html: () => `<div class="library-group">${groupFilter}</div>` })
+      entries.push({ html: () => `<button class="secondary" data-clear-group-filter>← Show every ${esc(groupBy)}</button>` })
+      entries.push({ html: () => `<div class="library-group">${esc(groupFilter)}</div>` })
       entries.push(...groups.get(groupFilter).map(tile))
     } else {
       const sortedLabels = [...groups.keys()].sort((a, b) => (a === 'Unknown' ? 1 : b === 'Unknown' ? -1 : a.localeCompare(b)))
@@ -665,7 +684,7 @@ function renderLibrary({ reset = false } = {}) {
       // videos, not just see them clustered on an otherwise-long page.
       for (const label of sortedLabels) {
         const count = groups.get(label).length
-        entries.push({ html: () => `<div class="library-group" data-group-filter="${label}" title="Show only ${label}">${label} <span class="group-count">${count}</span></div>` })
+        entries.push({ html: () => `<div class="library-group" data-group-filter="${esc(label)}" title="Show only ${esc(label)}">${esc(label)} <span class="group-count">${count}</span></div>` })
         entries.push(...groups.get(label).map(tile))
       }
     }
@@ -734,7 +753,7 @@ function removeTrackFromState(key, result) {
   renderLibrary()
   renderPlaylists()
   renderQueue()
-  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+  jukebox.playerUpdateQueue(displayQueue())
 }
 
 // Permanently removes one file from the actual media drive - not just
@@ -913,7 +932,7 @@ async function replaceOriginalWithConverted(key) {
   renderLibrary()
   renderPlaylists()
   renderQueue()
-  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+  jukebox.playerUpdateQueue(displayQueue())
   for (const t of newOnes.filter(needsProbe)) await generateThumbAndDuration(t)
   return 'replaced'
 }
@@ -1004,7 +1023,20 @@ async function addToQueue(key) {
 // used to only update this window's list - Display kept playing its own old
 // copy, so a song added with "+ Queue" mid-song never actually played.
 function sendQueueToDisplay() {
-  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+  jukebox.playerUpdateQueue(displayQueue())
+}
+
+// The queue as Display gets it: ONE entry per queue position, always. A
+// song whose file is gone (renamed or moved in File Explorer, say) used to
+// be left out, which shifted every later position by one - Display then
+// reported "playing #7" while Control's #7 was a different song, and
+// "play from here" started the wrong one. It's now a stand-in that Display
+// skips straight past, so the two lists always line up.
+function displayQueue() {
+  return queue.tracks.map((key) => {
+    const track = trackByKey(key)
+    return track ? toDisplayTrack(track) : { key, filename: '(file no longer in the library)', path: '', missing: true }
+  })
 }
 
 // Whole library, shuffled - excludes anything still needing conversion,
@@ -1077,17 +1109,23 @@ function renderQueue() {
     const track = trackByKey(key)
     if (!track) return ''
     const isNowPlaying = i === queue.currentIndex && lastPlayerState && lastPlayerState.status !== 'idle'
+    // The song on screen can't be moved, and nothing can be moved above
+    // it - Display is playing it by position, so shifting it would leave
+    // the two windows disagreeing about what's playing.
+    const active = lastPlayerState && lastPlayerState.status !== 'idle'
+    const canMoveUp = i > 0 && (!active || i - 1 > queue.currentIndex)
+    const canMoveDown = i + 1 < queue.tracks.length && (!active || i > queue.currentIndex)
     return `
       <li class="queue-row ${isNowPlaying ? 'now-playing' : ''}">
         <span class="queue-index">${i + 1}</span>
-        <span style="flex:1">${track.filename}</span>
+        <span style="flex:1">${esc(track.filename)}</span>
         ${requestedKeys.has(key) && i >= queue.currentIndex ? '<span class="request-tag">Request</span>' : ''}
         <span>${fmtTime(track.duration)}</span>
         <div class="button-row">
-          <button class="secondary" data-move-up="${i}">↑</button>
-          <button class="secondary" data-move-down="${i}">↓</button>
+          <button class="secondary" data-move-up="${i}" ${canMoveUp ? '' : 'disabled'}>↑</button>
+          <button class="secondary" data-move-down="${i}" ${canMoveDown ? '' : 'disabled'}>↓</button>
           <button class="secondary" data-play-from="${i}">▶</button>
-          <button class="danger" data-remove-idx="${i}">✕</button>
+          <button class="danger" data-remove-idx="${i}" title="${isNowPlaying ? 'Remove it and play the next song' : 'Remove from the queue'}">✕</button>
         </div>
       </li>`
   }).join('') + (hiddenAfter ? `<p class="eyebrow">…and ${hiddenAfter} more after these.</p>` : '') || '<p class="eyebrow">Queue is empty — add tracks from the Library.</p>'
@@ -1102,6 +1140,9 @@ function renderQueue() {
 async function moveQueueItem(index, direction) {
   const target = index + direction
   if (target < 0 || target >= queue.tracks.length) return
+  // Never move the song on screen, or swap another song into its place.
+  const playing = lastPlayerState && lastPlayerState.status !== 'idle'
+  if (playing && Math.min(index, target) <= queue.currentIndex) return
   const [item] = queue.tracks.splice(index, 1)
   queue.tracks.splice(target, 0, item)
   await saveAndSyncQueue()
@@ -1109,14 +1150,20 @@ async function moveQueueItem(index, direction) {
   if (Math.min(index, target) > queue.currentIndex) sendQueueToDisplay()
 }
 async function removeQueueItem(index) {
+  const onScreen = index === queue.currentIndex && lastPlayerState && lastPlayerState.status !== 'idle'
   queue.tracks.splice(index, 1)
+  if (index < queue.currentIndex) queue.currentIndex -= 1
   await saveAndSyncQueue()
-  if (index > queue.currentIndex) sendQueueToDisplay()
+  // Removing the song that's playing moves straight on to the next one -
+  // Display had it by position, so leaving it playing would put the two
+  // windows one song apart for the rest of the night.
+  if (onScreen) jukebox.playerLoadQueue({ tracks: displayQueue(), startIndex: index })
+  else if (index > queue.currentIndex) sendQueueToDisplay()
 }
 async function playQueueFrom(index) {
   queue.currentIndex = index
   await saveAndSyncQueue()
-  jukebox.playerLoadQueue({ tracks: queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack), startIndex: index })
+  jukebox.playerLoadQueue({ tracks: displayQueue(), startIndex: index })
 }
 
 // --- Playlists ---
@@ -1175,7 +1222,7 @@ async function playPlaylistNow(playlistId) {
   if (!playlist || playlist.trackKeys.length === 0) return
   queue = { tracks: [...playlist.trackKeys], currentIndex: 0 }
   await saveAndSyncQueue()
-  jukebox.playerLoadQueue({ tracks: queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack), startIndex: 0 })
+  jukebox.playerLoadQueue({ tracks: displayQueue(), startIndex: 0 })
 }
 async function appendPlaylistToQueue(playlistId) {
   const playlist = playlists.find((p) => p.id === playlistId)
@@ -1221,7 +1268,7 @@ function renderPlaylists() {
       <button class="secondary" id="playlist-back-btn">← Back to Playlists</button>
       <div class="playlist-card">
         <div class="playlist-header">
-          <strong>${p.name}${autoLabel ? ` <span class="auto-tag">${autoLabel}</span>` : ''}</strong>
+          <strong>${esc(p.name)}${autoLabel ? ` <span class="auto-tag">${autoLabel}</span>` : ''}</strong>
           <div class="button-row">
             <button class="primary" data-playlist-play="${p.id}">▶ Play Now</button>
             <button class="secondary" data-playlist-append="${p.id}">+ Add to Queue</button>
@@ -1235,7 +1282,7 @@ function renderPlaylists() {
             // Membership on an auto-synced playlist (folder or artist tag)
             // is recalculated on its own - no manual remove button, since
             // moving the file (or re-tagging it) is the actual "remove".
-            return `<div class="playlist-track-row"><span>${t.filename}</span>${isAuto ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
+            return `<div class="playlist-track-row"><span>${esc(t.filename)}</span>${isAuto ? '' : `<button class="danger" data-playlist-remove-track="${p.id}::${key}">✕</button>`}</div>`
           }).join('') || `<p class="eyebrow">${p.autoFolder ? 'No files currently in this folder.' : p.autoArtist ? 'No tracks tagged with this artist yet.' : 'No tracks yet - add some from the Library.'}</p>`}
         </div>
       </div>`
@@ -1247,7 +1294,7 @@ function renderPlaylists() {
   container.className = 'playlist-tiles'
   container.innerHTML = playlists.map((p) => `
     <div class="playlist-tile" data-open-playlist="${p.id}">
-      <strong>${p.name}${p.autoFolder ? ' <span class="auto-tag">📁</span>' : p.autoArtist ? ' <span class="auto-tag">🎤</span>' : ''}</strong>
+      <strong>${esc(p.name)}${p.autoFolder ? ' <span class="auto-tag">📁</span>' : p.autoArtist ? ' <span class="auto-tag">🎤</span>' : ''}</strong>
       <div class="track-meta">${p.trackKeys.length} track${p.trackKeys.length === 1 ? '' : 's'}</div>
       <div class="track-actions">
         <button class="primary" data-playlist-play="${p.id}">▶ Play</button>
@@ -1322,7 +1369,7 @@ async function shuffleUpcoming() {
   }
   queue.tracks = [...queue.tracks.slice(0, from), ...upcoming]
   await saveAndSyncQueue()
-  jukebox.playerUpdateQueue(queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack))
+  jukebox.playerUpdateQueue(displayQueue())
 }
 
 jukebox.onPlayerState((state) => {
@@ -1470,7 +1517,7 @@ function renderRequestsUi() {
 
   const list = document.getElementById('requests-devices')
   list.innerHTML = st.devices.length
-    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${d.name}</b> · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${d.id}">Remove</button></div>`).join('')
+    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${esc(d.name)}</b> · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${d.id}">Remove</button></div>`).join('')
     : '<p class="eyebrow" style="margin:0">No touch screens set up yet.</p>'
   list.querySelectorAll('[data-remove-device]').forEach((el) => el.addEventListener('click', async () => {
     if (!confirm('Remove this touch screen? It will need setting up again to take requests.')) return
@@ -1561,10 +1608,12 @@ jukebox.onUpdateStatus((status) => {
 // whatever already played before the restart, same as any other resume.
 function resumeQueueOnDisplay() {
   if (!queue.tracks.length || queue.currentIndex >= queue.tracks.length) return
-  const tracks = queue.tracks.map(trackByKey).filter(Boolean).map(toDisplayTrack)
+  const tracks = displayQueue()
   if (!tracks.length) return
   jukebox.playerLoadQueue({ tracks, startIndex: queue.currentIndex })
 }
+
+jukebox.onDisplayRestarted(() => resumeQueueOnDisplay())
 
 async function init() {
   await loadSettings()
