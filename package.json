@@ -2,14 +2,15 @@
   "name": "mslsc-jukebox",
   "productName": "MSLSC Jukebox",
   "private": true,
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "A local video jukebox for the TV connected to the venue PC - library, playlists, queue and crossfade transitions between clips.",
   "author": "Midway Surf Lifesaving Club",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win --publish always",
-    "dist:linux": "electron-builder --linux --publish always"
+    "dist:linux": "electron-builder --linux --publish always",
+    "test": "node --test \"test/*.test.js\""
   },
   "devDependencies": {
     "electron": "^33.0.0",
@@ -33,6 +34,8 @@
     "files": [
       "main.js",
       "requests.js",
+      "shared/**/*",
+      "lib/**/*",
       "request/**/*",
       "preload-control.js",
       "preload-display.js",

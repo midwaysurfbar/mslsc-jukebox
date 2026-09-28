@@ -198,6 +198,19 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <!-- Order matters: shared helpers, then state, then each area, then start-up. -->
+  <script src="../shared/file-url.js"></script>
+  <script src="../shared/names.js"></script>
+  <script src="../shared/queue-rules.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/library-scan.js"></script>
+  <script src="js/library-grid.js"></script>
+  <script src="js/library-actions.js"></script>
+  <script src="js/queue.js"></script>
+  <script src="js/playlists.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/requests.js"></script>
+  <script src="js/init.js"></script>
 </body>
 </html>

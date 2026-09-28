@@ -108,9 +108,11 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     return device
   }
 
-  function getLibrary() {
+  // Built from the Jukebox's last library scan (async - see lib/library.js),
+  // and reused for 2 minutes or until the library changes.
+  async function getLibrary() {
     if (!library || Date.now() - libraryBuiltAt > 2 * 60 * 1000) {
-      library = listLibrary()
+      library = await listLibrary()
       libraryBuiltAt = Date.now()
     }
     return library
@@ -176,7 +178,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     }
 
     if (req.method === 'GET' && url.pathname === '/api/library') {
-      return send(res, 200, { ok: true, tracks: getLibrary() })
+      return send(res, 200, { ok: true, tracks: await getLibrary() })
     }
 
     if (req.method === 'GET' && url.pathname === '/api/thumb') {

@@ -32,6 +32,10 @@ jobs:
 
       - run: npm ci
 
+      # The automated checks (test/) - a failing one stops the release
+      # before anything is built or published.
+      - run: npm test
+
       - run: npm run ${{ matrix.script }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

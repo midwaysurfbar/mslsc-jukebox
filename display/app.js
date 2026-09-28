@@ -95,7 +95,7 @@ function showAdImage(image) {
     adImageEl.style.width = `${sizePct}%`
     adImageEl.style.height = `${sizePct}%`
     adImageEl.addEventListener('error', finish, { once: true })
-    adImageEl.src = fileUrl(image.path)
+    adImageEl.src = toFileUrl(image.path)
     setTimeout(finish, seconds * 1000)
   })
 }
@@ -151,7 +151,7 @@ function playIntroClip() {
     introDeck.addEventListener('error', finish, { once: true })
     introDeck.muted = true
     introDeck.volume = 0
-    introDeck.src = fileUrl(introVideoPath)
+    introDeck.src = toFileUrl(introVideoPath)
     introDeck.currentTime = 0
     introDeck.classList.add('active')
     introDeck.play().catch(finish)
@@ -185,25 +185,7 @@ function otherDeck(deck) {
   return deck === deckA ? deckB : deckA
 }
 
-// Windows paths use backslashes - encodeURIComponent per-segment on a
-// forward-slash split would mangle them, so split on whichever this
-// path actually uses. The URL itself must always use forward slashes
-// regardless of the source OS - a file:// URL with backslashes is
-// invalid and silently fails to load on Windows.
-// A Windows path's drive letter (e.g. "C:") must stay literal in a
-// file:// URL - encodeURIComponent turns ":" into "%3A", which produces
-// a URL that can't resolve to any real file. Everything AFTER the
-// drive letter still needs normal per-segment encoding (spaces, etc),
-// same as a POSIX path.
-function fileUrl(filePath) {
-  const winMatch = filePath.match(/^([A-Za-z]:)[\\/](.*)$/)
-  if (winMatch) {
-    const [, drive, rest] = winMatch
-    const encoded = rest.split(/[\\/]/).map(encodeURIComponent).join('/')
-    return `file:///${drive}/${encoded}`
-  }
-  return 'file://' + filePath.split('/').map(encodeURIComponent).join('/')
-}
+// toFileUrl() comes from ../shared/file-url.js (loaded first).
 
 function currentTrack() {
   return queue[currentIndex] || null
@@ -258,7 +240,7 @@ async function loadDeck(deck, track) {
     }
     deck.addEventListener('canplay', onReady, { once: true })
     deck.addEventListener('error', onError, { once: true })
-    deck.src = fileUrl(track.path)
+    deck.src = toFileUrl(track.path)
     deck.load()
   })
 }
