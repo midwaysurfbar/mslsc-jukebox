@@ -78,12 +78,25 @@ function sendToDisplay(channel, payload) {
 // hands over (a fixed list of named calls), never Node itself.
 const WEB_PREFERENCES = { contextIsolation: true, sandbox: true, nodeIntegration: false }
 
+// Control opens sized to fit its screen, landscape or portrait (Sam,
+// 2026-10-07): it used to always open 1280 wide with a 900 minimum, which
+// hung off the side of a portrait screen. The layout itself already flows
+// down to ~640 wide.
+function controlSize() {
+  const { workArea } = screen.getPrimaryDisplay()
+  return {
+    width: Math.min(1280, workArea.width - 40),
+    height: Math.min(820, workArea.height - 40),
+    minWidth: Math.min(640, workArea.width),
+    minHeight: Math.min(560, workArea.height),
+  }
+}
+
 function createControlWindow() {
+  const size = controlSize()
   controlWindow = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 900,
-    minHeight: 600,
+    ...size,
+    center: true,
     backgroundColor: '#173F4F',
     title: 'MSLSC Jukebox',
     icon: path.join(__dirname, 'build', 'icon.png'),
@@ -98,13 +111,55 @@ function createControlWindow() {
   })
 }
 
-function createDisplayWindow() {
-  // The TV is whichever display isn't the primary one. With only one screen
-  // (development) it opens there, without taking over the whole screen.
-  const displays = screen.getAllDisplays()
+// The TV is whichever display isn't the primary one. With only one screen
+// (development) it opens there, without taking over the whole screen.
+function tvTarget() {
   const primary = screen.getPrimaryDisplay()
-  const target = displays.find((d) => d.id !== primary.id) || primary
-  const singleDisplay = target.id === primary.id
+  const target = screen.getAllDisplays().find((d) => d.id !== primary.id) || primary
+  return { target, singleDisplay: target.id === primary.id }
+}
+
+// Screens rotated, plugged in or unplugged while the Jukebox is running:
+// put the TV window back over the TV at its new size/shape (portrait or
+// landscape - the page itself fits any shape), and keep Control on screen.
+function refitWindows() {
+  if (alive(displayWindow)) {
+    const { target, singleDisplay } = tvTarget()
+    const now = displayWindow.getBounds()
+    const t = target.bounds
+    // Only when the TV's shape or position actually changed - this event
+    // also fires for things like the taskbar moving.
+    if (now.x === t.x && now.y === t.y && now.width === t.width && now.height === t.height) return refitControl()
+    displayWindow.setFullScreen(false)
+    displayWindow.setAlwaysOnTop(!singleDisplay)
+    displayWindow.setBounds(target.bounds)
+    if (!singleDisplay) displayWindow.setFullScreen(true)
+  }
+  refitControl()
+}
+
+function refitControl() {
+  if (alive(controlWindow) && !controlWindow.isMaximized() && !controlWindow.isFullScreen()) {
+    const { workArea } = screen.getDisplayMatching(controlWindow.getBounds())
+    const b = controlWindow.getBounds()
+    const size = controlSize()
+    controlWindow.setMinimumSize(size.minWidth, size.minHeight)
+    const width = Math.min(b.width, workArea.width)
+    const height = Math.min(b.height, workArea.height)
+    const x = Math.min(Math.max(b.x, workArea.x), workArea.x + workArea.width - width)
+    const y = Math.min(Math.max(b.y, workArea.y), workArea.y + workArea.height - height)
+    if (width !== b.width || height !== b.height || x !== b.x || y !== b.y) controlWindow.setBounds({ x, y, width, height })
+  }
+}
+
+let refitTimer = null
+function scheduleRefit() {
+  clearTimeout(refitTimer)
+  refitTimer = setTimeout(refitWindows, 800)
+}
+
+function createDisplayWindow() {
+  const { target, singleDisplay } = tvTarget()
 
   displayWindow = new BrowserWindow({
     x: target.bounds.x,
@@ -354,6 +409,9 @@ if (!app.requestSingleInstanceLock()) {
 
 function startApp() {
   Menu.setApplicationMenu(null)
+  screen.on('display-metrics-changed', scheduleRefit)
+  screen.on('display-added', scheduleRefit)
+  screen.on('display-removed', scheduleRefit)
   library.removeLeftoverTempFiles()
   createControlWindow()
   createDisplayWindow()
