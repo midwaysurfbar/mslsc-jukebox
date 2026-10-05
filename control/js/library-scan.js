@@ -109,10 +109,14 @@ async function generateThumbAndDuration(track) {
   })
 }
 
-// A track only needs opening in a <video> if it's never been measured, or
-// it's playable but somehow still has no thumbnail.
+// A track only needs opening in a <video> if it's never been measured, it's
+// playable but somehow still has no thumbnail, or it's marked as not
+// playing. That last one is re-checked on every start (Sam, 2026-10-06):
+// a network blip or a slow first look after converting could leave a
+// perfectly good video stuck as "Unsupported" for good - 1,086 of them on
+// the venue PC, all of which turned out to play fine.
 function needsProbe(track) {
-  return !track.infoCached || (!track.thumbPath && !track.error)
+  return !track.infoCached || track.error || !track.thumbPath
 }
 
 async function rescanLibrary() {

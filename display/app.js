@@ -245,7 +245,7 @@ async function loadDeck(deck, track) {
   })
 }
 
-async function playIndex(index) {
+async function playIndex(index, { paused = false } = {}) {
   if (index < 0 || index >= queue.length) {
     // The idle overlay visually covers the stage either way, but the
     // active deck was still genuinely playing (audio and all) right up
@@ -281,10 +281,17 @@ async function playIndex(index) {
   otherDeck(activeDeck).classList.remove('active')
   showIdleOverlay(false)
   activeDeck.currentTime = 0
-  activeDeck.play()
-  isPlaying = true
   isTransitioning = false
   introTransitionNoted = false
+  if (paused) {
+    // Loaded and showing its first frame, waiting for Play.
+    activeDeck.pause()
+    isPlaying = false
+    reportState({ status: 'paused' })
+    return
+  }
+  activeDeck.play()
+  isPlaying = true
   reportState({ status: 'playing' })
 }
 
@@ -378,9 +385,9 @@ setInterval(() => { if (isPlaying) reportState() }, 1000)
 
 // --- Commands from Control (via main) ---
 
-jukebox.onLoadQueue(({ tracks, startIndex }) => {
+jukebox.onLoadQueue(({ tracks, startIndex, paused }) => {
   queue = tracks || []
-  playIndex(startIndex || 0)
+  playIndex(startIndex || 0, { paused })
 })
 // A reorder (Shuffle) - swap in the new track order but leave playback
 // exactly where it is. currentIndex still points at the same track

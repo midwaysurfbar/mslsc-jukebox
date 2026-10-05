@@ -354,6 +354,7 @@ if (!app.requestSingleInstanceLock()) {
 
 function startApp() {
   Menu.setApplicationMenu(null)
+  library.removeLeftoverTempFiles()
   createControlWindow()
   createDisplayWindow()
   createTray()

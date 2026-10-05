@@ -29,11 +29,15 @@ jukebox.onUpdateStatus((status) => {
 // "reappears" once Display is actually resumed on it. Full tracks array
 // (not just what's left unplayed) so Previous still reaches back into
 // whatever already played before the restart, same as any other resume.
-function resumeQueueOnDisplay() {
+// `paused`: opening the app hands the queue back ready to go but doesn't
+// start playing (Sam, 2026-10-06 - a song started by itself as soon as the
+// Jukebox was opened). Press Play to carry on. A TV window that crashed and
+// came back mid-night still carries straight on playing.
+function resumeQueueOnDisplay({ paused = false } = {}) {
   if (!queue.tracks.length || queue.currentIndex >= queue.tracks.length) return
   const tracks = displayQueue()
   if (!tracks.length) return
-  jukebox.playerLoadQueue({ tracks, startIndex: queue.currentIndex })
+  jukebox.playerLoadQueue({ tracks, startIndex: queue.currentIndex, paused })
 }
 
 jukebox.onDisplayRestarted(() => resumeQueueOnDisplay())
@@ -49,7 +53,7 @@ async function init() {
   // renderQueue() above ran against an empty library - re-render now
   // that trackByKey can actually resolve the persisted queue's tracks.
   renderQueue()
-  resumeQueueOnDisplay()
+  resumeQueueOnDisplay({ paused: true })
   refreshRequestsState()
   pushRequestStatus()
   document.getElementById('app-version').textContent = await jukebox.getAppVersion()
