@@ -5,6 +5,11 @@
 
 const $ = (id) => document.getElementById(id)
 const TOKEN_KEY = 'mslsc-jukebox-request-token'
+
+// A public touch screen (Sam, 2026-10-09: locked down) - no long-press menu,
+// text selection or dragging anywhere on the picker. The search box is filled
+// by the on-screen keyboard, so nothing here needs normal text selection.
+for (const ev of ['contextmenu', 'dragstart', 'selectstart']) document.addEventListener(ev, (e) => e.preventDefault())
 const IDLE_MS = 60 * 1000
 const PAGE = 48
 
