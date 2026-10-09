@@ -64,12 +64,12 @@ const BAR_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon 
 const BAR_CHECK_MS = 30000
 // Commands the main process answers itself; everything else goes to Control.
 const REMOTE_COMMANDS = new Set([
-  'toggle', 'skip', 'previous', 'seek', 'volume',
+  'toggle', 'skip', 'previous', 'seek', 'volume', 'tv-start-hidden',
   'add', 'next', 'move', 'remove', 'play-from', 'shuffle', 'clear',
   'playlist-play', 'playlist-queue',
 ])
 
-module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, appVersion = '', port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS }) {
+module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, appVersion = '', tv = null, port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS }) {
   const REQUESTS_PATH = path.join(userData, 'requests.json')
   const load = () => ({ enabled: false, serverOn: false, followBar: true, devices: [], ...readJson(REQUESTS_PATH, {}) })
   let config = load()
@@ -225,7 +225,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
 
   async function handleRemote(req, res, url, device) {
     if (req.method === 'GET' && url.pathname === '/api/remote/state') {
-      return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState() })
+      return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState(), tv: tv ? { visible: Boolean(tv.visible()) } : null })
     }
     if (req.method === 'POST' && url.pathname === '/api/remote/command') {
       const { action, args } = await readBody(req)
@@ -241,6 +241,12 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
         config.followBar = Boolean(a.follow)
         save()
         notifyControl()
+        return send(res, 200, { ok: true })
+      }
+      if (action === 'tv-show' || action === 'tv-hide') {
+        if (!tv) return send(res, 200, { ok: false, error: 'The TV can\'t be changed from here.' })
+        if (action === 'tv-show') tv.show()
+        else tv.hide()
         return send(res, 200, { ok: true })
       }
       if (action === 'pair') { startPairing(a.kind); return send(res, 200, { ok: true }) }

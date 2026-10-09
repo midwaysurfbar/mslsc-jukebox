@@ -202,3 +202,18 @@ test('if the bar status can\'t be checked, the picker stays open', async (t) => 
   await fake.api.checkBar()
   assert.equal((await call('/api/status', { token: picker })).data.barAllows, false)
 })
+
+test('Show on TV / Hide TV from a remote', async (t) => {
+  let visible = false
+  const tv = { visible: () => visible, show: () => { visible = true }, hide: () => { visible = false } }
+  const fake = start(t, { tv })
+  const remote = await pair(fake, 'remote')
+  assert.equal((await call('/api/remote/state', { token: remote })).data.tv.visible, false)
+  await call('/api/remote/command', { token: remote, body: { action: 'tv-show' } })
+  assert.equal((await call('/api/remote/state', { token: remote })).data.tv.visible, true)
+  await call('/api/remote/command', { token: remote, body: { action: 'tv-hide' } })
+  assert.equal(visible, false)
+  // the start-hidden setting is Control's to change - relayed, not handled here
+  const r = await call('/api/remote/command', { token: remote, body: { action: 'tv-start-hidden', args: { hidden: true } } })
+  assert.equal(r.data.did, 'tv-start-hidden')
+})

@@ -37,6 +37,7 @@ function pushRemoteStatus() {
     elapsed: st ? st.timeElapsed || 0 : 0,
     duration: st ? st.duration || 0 : 0,
     volume: settings.volume,
+    tvStartHidden: Boolean(settings.tvStartHidden),
     upcoming: rows,
     upcomingTotal: Math.max(0, queue.tracks.length - from),
     playlists: playlists.map((p) => ({ id: p.id, name: p.name, n: p.trackKeys.length })),
@@ -75,6 +76,13 @@ const remoteActions = {
     const f = Number(fraction)
     if (!(duration > 0) || !(f >= 0 && f <= 1)) return { ok: false, error: 'Nothing to move through.' }
     jukebox.playerSeek(f * duration)
+    return { ok: true }
+  },
+  // Control owns settings.json (it writes its whole copy back), so the
+  // setting is changed here rather than by the main process.
+  async 'tv-start-hidden'({ hidden }) {
+    settings.tvStartHidden = Boolean(hidden)
+    await jukebox.saveSettings(settings)
     return { ok: true }
   },
   volume({ volume }) {

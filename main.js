@@ -130,10 +130,13 @@ function refitWindows() {
     // Only when the TV's shape or position actually changed - this event
     // also fires for things like the taskbar moving.
     if (now.x === t.x && now.y === t.y && now.width === t.width && now.height === t.height) return refitControl()
+    // A hidden TV window stays hidden - going fullscreen would show it.
+    const wasVisible = displayWindow.isVisible()
     displayWindow.setFullScreen(false)
     displayWindow.setAlwaysOnTop(!singleDisplay)
     displayWindow.setBounds(target.bounds)
-    if (!singleDisplay) displayWindow.setFullScreen(true)
+    if (!singleDisplay && wasVisible) displayWindow.setFullScreen(true)
+    if (!wasVisible) displayWindow.hide()
   }
   refitControl()
 }
@@ -158,10 +161,11 @@ function scheduleRefit() {
   refitTimer = setTimeout(refitWindows, 800)
 }
 
-function createDisplayWindow() {
+function createDisplayWindow({ hidden = false } = {}) {
   const { target, singleDisplay } = tvTarget()
 
   displayWindow = new BrowserWindow({
+    show: !hidden,
     x: target.bounds.x,
     y: target.bounds.y,
     width: target.bounds.width,
@@ -195,12 +199,20 @@ function createDisplayWindow() {
   })
 }
 
+function hideDisplayWindow() {
+  if (alive(displayWindow)) {
+    displayWindow.setFullScreen(false)
+    displayWindow.hide()
+  }
+}
+
 // Normally the Display window is only hidden (its close handler turns a
 // close into a hide), so .show() is enough; if it's genuinely gone it's
 // rebuilt - never a dead end only a restart gets out of (Sam, 2026-09-12).
 function reopenDisplayWindow() {
   if (alive(displayWindow)) {
     displayWindow.show()
+    if (!tvTarget().singleDisplay) displayWindow.setFullScreen(true)
     displayWindow.focus()
   } else {
     createDisplayWindow()
@@ -388,6 +400,12 @@ function startRequests() {
       writeJson: store.writeJson,
       listLibrary: () => library.listRequestLibrary(),
       appVersion: app.getVersion(),
+      // The Remote's Show on TV / Hide TV
+      tv: {
+        visible: () => alive(displayWindow) && displayWindow.isVisible(),
+        show: reopenDisplayWindow,
+        hide: hideDisplayWindow,
+      },
     })
   } catch (err) {
     // Requests are an extra - nothing about playing videos depends on them.
@@ -415,7 +433,7 @@ function startApp() {
   screen.on('display-removed', scheduleRefit)
   library.removeLeftoverTempFiles()
   createControlWindow()
-  createDisplayWindow()
+  createDisplayWindow({ hidden: Boolean(store.getSettings().tvStartHidden) })
   createTray()
   updates.start()
   mediaWatch.start(store.getSettings().mediaFolder)

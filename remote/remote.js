@@ -248,6 +248,11 @@ $('pl-list').addEventListener('click', (e) => {
 })
 
 // ---------------------------------------------------------------- requests & screens
+$('tv-hidden-toggle').addEventListener('change', () => command('tv-start-hidden', { hidden: $('tv-hidden-toggle').checked }, $('tv-hidden-toggle').checked ? 'The TV will start hidden.' : 'The TV will show at start-up.'))
+$('tv-btn').addEventListener('click', () => {
+  const showing = state && state.tv && state.tv.visible
+  command(showing ? 'tv-hide' : 'tv-show', {}, showing ? 'TV hidden.' : 'Showing on the TV.')
+})
 $('bar-toggle').addEventListener('change', () => command('requests-follow-bar', { follow: $('bar-toggle').checked }, $('bar-toggle').checked ? 'Requests now follow the bar.' : 'Requests no longer follow the bar.'))
 $('req-toggle').addEventListener('change', () => command('requests-enabled', { enabled: $('req-toggle').checked }, $('req-toggle').checked ? 'Song requests are on.' : 'Song requests are off.'))
 document.querySelectorAll('[data-pair]').forEach((b) => b.addEventListener('click', () => command('pair', { kind: b.dataset.pair })))
@@ -261,6 +266,14 @@ function timeAgo(ms) {
   return hours < 48 ? `last used ${hours} h ago` : `last used ${new Date(ms).toLocaleDateString()}`
 }
 let lastDevSig = ''
+function renderTv() {
+  const tv = state.tv
+  $('tv-btn').hidden = !tv
+  $('tv-state').textContent = !tv ? '' : tv.visible ? 'TV: showing' : 'TV: hidden'
+  $('tv-btn').textContent = tv && tv.visible ? 'Hide TV' : 'Show on TV'
+  if (state.player) $('tv-hidden-toggle').checked = Boolean(state.player.tvStartHidden)
+}
+
 function renderScreens() {
   const r = state.requests
   $('req-toggle').checked = r.enabled
@@ -312,6 +325,7 @@ async function poll() {
     renderQueue()
     if (tab === 'playlists') renderPlaylists()
     renderScreens()
+    renderTv()
   } catch (err) {
     if (err.message !== 'not-paired' && ++failures >= 3) {
       $('offline').hidden = false

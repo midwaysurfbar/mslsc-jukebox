@@ -58,6 +58,9 @@ h2{font-size:1.05rem;margin:22px 0 8px}
 .volume b{color:#fff;text-align:right;font-variant-numeric:tabular-nums}
 .volume input{width:100%;accent-color:var(--bright);height:28px}
 
+.tv-row{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:12px;color:#cfe3e8;font-size:.9rem}
+.tv-btn{background:#ffffff1f;color:#fff;padding:8px 16px;min-height:40px}
+
 /* ---- tabs + panels ---- */
 .tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px;position:sticky;top:0;z-index:2}
 .tabs button{background:transparent;color:var(--teal);padding:10px 6px;font-size:.95rem}
