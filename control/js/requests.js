@@ -121,10 +121,10 @@ function renderRequestsUi() {
 
   const list = document.getElementById('requests-devices')
   list.innerHTML = st.devices.length
-    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${esc(d.name)}</b> · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${d.id}">Remove</button></div>`).join('')
-    : '<p class="eyebrow" style="margin:0">No touch screens set up yet.</p>'
+    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${esc(d.name)}</b> · ${d.kind === 'remote' ? 'staff remote' : 'song picker'} · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${esc(d.id)}">Remove</button></div>`).join('')
+    : '<p class="eyebrow" style="margin:0">No touch screens or remotes set up yet.</p>'
   list.querySelectorAll('[data-remove-device]').forEach((el) => el.addEventListener('click', async () => {
-    if (!confirm('Remove this touch screen? It will need setting up again to take requests.')) return
+    if (!confirm('Remove this screen? It will need setting up again before it can be used.')) return
     requestsState = await jukebox.removeRequestDevice(el.dataset.removeDevice)
     renderRequestsUi()
   }))
@@ -133,7 +133,9 @@ function renderRequestsUi() {
   box.hidden = !st.pairing
   if (st.pairing) {
     const address = st.addresses.find((a) => /\/\/(192\.168|10\.|172\.)/.test(a)) || st.addresses[0] || `http://<this PC's address>:${st.port}`
-    document.getElementById('pairing-address').textContent = address
+    const remote = st.pairing.kind === 'remote'
+    document.getElementById('pairing-intro').textContent = remote ? 'On the remote screen (another PC, phone or tablet), open this address in the browser:' : 'On the touch screen, open this address in the browser:'
+    document.getElementById('pairing-address').textContent = remote ? `${address}/remote` : address
     document.getElementById('pairing-code').textContent = st.pairing.code
     const mins = Math.max(0, Math.ceil((st.pairing.expiresAt - Date.now()) / 60000))
     document.getElementById('pairing-expiry').textContent = `This code works for ${mins} more minute${mins === 1 ? '' : 's'}.`
@@ -166,7 +168,11 @@ document.getElementById('clear-requests-btn').addEventListener('click', async ()
   sendQueueToDisplay()
 })
 document.getElementById('pair-screen-btn').addEventListener('click', async () => {
-  requestsState = await jukebox.startRequestPairing()
+  requestsState = await jukebox.startRequestPairing('picker')
+  renderRequestsUi()
+})
+document.getElementById('pair-remote-btn').addEventListener('click', async () => {
+  requestsState = await jukebox.startRequestPairing('remote')
   renderRequestsUi()
 })
 document.getElementById('cancel-pairing-btn').addEventListener('click', async () => {
@@ -177,6 +183,7 @@ jukebox.onRequestsState((state) => {
   const newDevice = requestsState && state.devices.length > requestsState.devices.length
   requestsState = state
   renderRequestsUi()
+  // a pairing started from a remote shows up here too
   if (newDevice) document.getElementById('requests-message').textContent = `${state.devices[state.devices.length - 1].name} is set up and ready.`
 })
 // keep the code's "minutes left" and each screen's "last used" current

@@ -77,13 +77,20 @@ contextBridge.exposeInMainWorld('jukebox', {
   // Patron song requests (see requests.js)
   getRequestsState: () => ipcRenderer.invoke('requests:get-state'),
   setRequestsEnabled: (enabled) => ipcRenderer.invoke('requests:set-enabled', enabled),
-  startRequestPairing: () => ipcRenderer.invoke('requests:start-pairing'),
+  // kind: 'picker' (song-picker touch screen, the default) or 'remote' (staff remote)
+  startRequestPairing: (kind) => ipcRenderer.invoke('requests:start-pairing', kind),
   cancelRequestPairing: () => ipcRenderer.invoke('requests:cancel-pairing'),
   removeRequestDevice: (id) => ipcRenderer.invoke('requests:remove-device', id),
   onRequestsState: (callback) => ipcRenderer.on('requests:state', (_event, state) => callback(state)),
   onRequestIncoming: (callback) => ipcRenderer.on('requests:incoming', (_event, payload) => callback(payload)),
   replyRequest: (id, result) => ipcRenderer.send('requests:reply', { id, result }),
   sendRequestStatus: (snapshot) => ipcRenderer.send('requests:status', snapshot),
+
+  // Staff Remote (see requests.js): commands come in, Control carries them
+  // out and answers; Control also keeps the remote's snapshot up to date.
+  onRemoteCommand: (callback) => ipcRenderer.on('remote:command', (_event, payload) => callback(payload)),
+  replyRemote: (id, result) => ipcRenderer.send('remote:reply', { id, result }),
+  sendRemoteStatus: (snapshot) => ipcRenderer.send('remote:status', snapshot),
 
   // Player state (relayed back from the Display window)
   onPlayerState: (callback) => ipcRenderer.on('player:state', (_event, state) => callback(state)),

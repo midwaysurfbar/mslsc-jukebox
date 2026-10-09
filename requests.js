@@ -15,6 +15,14 @@
 //   * Requests join the END of the queue in the order they arrive, exactly
 //     like a song added in Control.
 //
+// Staff Remote (Sam, 2026-10-09): the same server also serves /remote, a
+// full staff control page for when the Jukebox's own Control window is out
+// of reach (the venue PC's screen became the touch-screen kiosk + picker, so
+// staff drive the music from the other PC). Remotes pair with their own
+// one-time code; a song-picker screen can never use the remote commands.
+// Every remote command is carried out BY the Control window (it still owns
+// the queue) - this file only relays it and the answer, like requests.
+//
 // Safety: nothing here runs until requests are first switched on or a
 // screen is set up (so Windows never asks about network access before
 // then), every failure is caught and only reported in Control, and the
@@ -31,15 +39,25 @@ const PORT = 4610
 const MAX_WAITING = 20
 const REPEAT_MINUTES = 10
 const PAIRING_MINUTES = 10
-const PAGE_DIR = path.join(__dirname, 'request')
 const PAGE_FILES = {
-  '/': ['index.html', 'text/html; charset=utf-8'],
-  '/index.html': ['index.html', 'text/html; charset=utf-8'],
-  '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
-  '/style.css': ['style.css', 'text/css; charset=utf-8'],
+  '/': ['request/index.html', 'text/html; charset=utf-8'],
+  '/index.html': ['request/index.html', 'text/html; charset=utf-8'],
+  '/app.js': ['request/app.js', 'text/javascript; charset=utf-8'],
+  '/style.css': ['request/style.css', 'text/css; charset=utf-8'],
+  '/remote': ['remote/index.html', 'text/html; charset=utf-8'],
+  '/remote/': ['remote/index.html', 'text/html; charset=utf-8'],
+  '/remote/remote.js': ['remote/remote.js', 'text/javascript; charset=utf-8'],
+  '/remote/remote.css': ['remote/remote.css', 'text/css; charset=utf-8'],
 }
+const KINDS = new Set(['picker', 'remote'])
+// Commands the main process answers itself; everything else goes to Control.
+const REMOTE_COMMANDS = new Set([
+  'toggle', 'skip', 'previous', 'seek', 'volume',
+  'add', 'next', 'move', 'remove', 'play-from', 'shuffle', 'clear',
+  'playlist-play', 'playlist-queue',
+])
 
-module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary }) {
+module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, appVersion = '', port = PORT }) {
   const REQUESTS_PATH = path.join(userData, 'requests.json')
   const load = () => ({ enabled: false, serverOn: false, devices: [], ...readJson(REQUESTS_PATH, {}) })
   let config = load()
@@ -47,9 +65,10 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
 
   let server = null
   let serverError = ''
-  let pairing = null // { code, expiresAt }
+  let pairing = null // { code, expiresAt, kind }
   let badPairAttempts = []
   let status = { nowPlaying: null, upNext: [], waiting: 0 }
+  let remoteStatus = null // full snapshot for /remote, pushed by Control
   let library = null
   let libraryBuiltAt = 0
   const pending = new Map() // request id -> resolve
@@ -57,7 +76,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   function addresses() {
     const out = []
     for (const list of Object.values(os.networkInterfaces())) {
-      for (const a of list || []) if (a.family === 'IPv4' && !a.internal) out.push(`http://${a.address}:${PORT}`)
+      for (const a of list || []) if (a.family === 'IPv4' && !a.internal) out.push(`http://${a.address}:${port}`)
     }
     return out
   }
@@ -68,9 +87,9 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       enabled: config.enabled,
       serverRunning: Boolean(server),
       serverError,
-      port: PORT,
+      port,
       addresses: addresses(),
-      devices: config.devices.map(({ id, name, pairedAt, lastSeen }) => ({ id, name, pairedAt, lastSeen })),
+      devices: config.devices.map(({ id, name, pairedAt, lastSeen, kind }) => ({ id, name, pairedAt, lastSeen, kind: kind || 'picker' })),
       pairing,
       maxWaiting: MAX_WAITING,
     }
@@ -118,6 +137,67 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     return library
   }
 
+  // A remote command, carried out by Control (it owns the queue).
+  function askControlRemote(action, args) {
+    const win = getControlWindow()
+    if (!win || win.isDestroyed()) return Promise.resolve({ ok: false, error: 'The Jukebox is starting up - try again in a moment.' })
+    const id = crypto.randomUUID()
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => { pending.delete(id); resolve({ ok: false, error: 'The Jukebox didn\'t answer - try again.' }) }, 8000)
+      pending.set(id, (result) => { clearTimeout(timer); resolve(result) })
+      win.webContents.send('remote:command', { id, action, args })
+    })
+  }
+
+  function startPairing(kind) {
+    config.serverOn = true
+    save()
+    startServer()
+    pairing = { code: String(crypto.randomInt(0, 1000000)).padStart(6, '0'), expiresAt: Date.now() + PAIRING_MINUTES * 60000, kind: KINDS.has(kind) ? kind : 'picker' }
+    notifyControl()
+  }
+
+  function remoteRequestsState() {
+    const st = publicState()
+    return {
+      enabled: st.enabled,
+      waiting: status.waiting,
+      maxWaiting: MAX_WAITING,
+      devices: st.devices.map(({ id, name, lastSeen, kind }) => ({ id, name, lastSeen, kind })),
+      pairing: st.pairing,
+      address: st.addresses.find((a) => /\/\/(192\.168|10\.|172\.)/.test(a)) || st.addresses[0] || '',
+    }
+  }
+
+  async function handleRemote(req, res, url, device) {
+    if (req.method === 'GET' && url.pathname === '/api/remote/state') {
+      return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState() })
+    }
+    if (req.method === 'POST' && url.pathname === '/api/remote/command') {
+      const { action, args } = await readBody(req)
+      const a = args && typeof args === 'object' ? args : {}
+      if (action === 'requests-enabled') {
+        config.enabled = Boolean(a.enabled)
+        if (config.enabled) config.serverOn = true
+        save()
+        notifyControl()
+        return send(res, 200, { ok: true })
+      }
+      if (action === 'pair') { startPairing(a.kind); return send(res, 200, { ok: true }) }
+      if (action === 'cancel-pair') { pairing = null; notifyControl(); return send(res, 200, { ok: true }) }
+      if (action === 'remove-device') {
+        if (a.id === device.id) return send(res, 400, { ok: false, error: 'This is the screen you\'re using - remove it from another remote or the Jukebox.' })
+        config.devices = config.devices.filter((d) => d.id !== a.id)
+        save()
+        notifyControl()
+        return send(res, 200, { ok: true })
+      }
+      if (!REMOTE_COMMANDS.has(action)) return send(res, 400, { ok: false, error: 'Unknown command.' })
+      return send(res, 200, await askControlRemote(action, a))
+    }
+    return send(res, 404, { ok: false, error: 'Not found' })
+  }
+
   function askControl(key) {
     const win = getControlWindow()
     if (!win || win.isDestroyed()) return Promise.resolve({ ok: false, reason: 'unavailable' })
@@ -134,7 +214,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
 
     if (req.method === 'GET' && PAGE_FILES[url.pathname]) {
       const [file, type] = PAGE_FILES[url.pathname]
-      fs.readFile(path.join(PAGE_DIR, file), (err, data) => (err ? send(res, 404, 'Not found', 'text/plain') : send(res, 200, data, type)))
+      fs.readFile(path.join(__dirname, file), (err, data) => (err ? send(res, 404, 'Not found', 'text/plain') : send(res, 200, data, type)))
       return
     }
 
@@ -142,15 +222,25 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       const now = Date.now()
       badPairAttempts = badPairAttempts.filter((t) => now - t < 60000)
       if (badPairAttempts.length >= 10) return send(res, 429, { ok: false, error: 'Too many tries - wait a minute and try again.' })
-      const { code } = await readBody(req)
+      const { code, kind: wanted } = await readBody(req)
       if (!pairing || now > pairing.expiresAt || String(code || '') !== pairing.code) {
         badPairAttempts.push(now)
         return send(res, 403, { ok: false, error: 'That code isn\'t right, or has expired. Get a new one from the Jukebox.' })
       }
+      // A remote's code only sets up a remote, and a song picker's only a picker.
+      const kind = wanted === 'remote' ? 'remote' : 'picker'
+      if (kind !== pairing.kind) {
+        badPairAttempts.push(now)
+        return send(res, 403, { ok: false, error: kind === 'remote'
+          ? 'That code is for a song-picker screen. On the Jukebox choose "Set up a remote" instead.'
+          : 'That code is for a remote. On the Jukebox choose "Set up a touch screen" instead.' })
+      }
+      const sameKind = config.devices.filter((d) => (d.kind || 'picker') === kind).length
       const device = {
         id: crypto.randomUUID(),
         token: crypto.randomBytes(24).toString('hex'),
-        name: `Touch screen ${config.devices.length + 1}`,
+        name: kind === 'remote' ? `Remote ${sameKind + 1}` : `Touch screen ${sameKind + 1}`,
+        kind,
         pairedAt: now,
         lastSeen: now,
       }
@@ -164,6 +254,10 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     if (!url.pathname.startsWith('/api/')) return send(res, 404, 'Not found', 'text/plain')
     const device = deviceFor(req, url)
     if (!device) return send(res, 401, { ok: false, error: 'not-paired' })
+    if (url.pathname.startsWith('/api/remote/')) {
+      if (device.kind !== 'remote') return send(res, 403, { ok: false, error: 'not-a-remote' })
+      return handleRemote(req, res, url, device)
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return send(res, 200, {
@@ -215,12 +309,12 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     })
     s.on('error', (err) => {
       serverError = err.code === 'EADDRINUSE'
-        ? `Port ${PORT} is already in use on this PC, so the song picker can't start.`
+        ? `Port ${port} is already in use on this PC, so the song picker can't start.`
         : `The song picker couldn't start: ${err.message}`
       server = null
       notifyControl()
     })
-    s.listen(PORT, '0.0.0.0', () => { server = s; notifyControl() })
+    s.listen(port, '0.0.0.0', () => { server = s; notifyControl() })
   }
 
   // ---- IPC with Control ----------------------------------------------------
@@ -231,11 +325,8 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     save()
     return publicState()
   })
-  ipcMain.handle('requests:start-pairing', () => {
-    config.serverOn = true
-    save()
-    startServer()
-    pairing = { code: String(crypto.randomInt(0, 1000000)).padStart(6, '0'), expiresAt: Date.now() + PAIRING_MINUTES * 60000 }
+  ipcMain.handle('requests:start-pairing', (_event, kind) => {
+    startPairing(kind)
     return publicState()
   })
   ipcMain.handle('requests:cancel-pairing', () => { pairing = null; return publicState() })
@@ -249,11 +340,21 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     if (resolve) { pending.delete(id); resolve(result) }
   })
   ipcMain.on('requests:status', (_event, snapshot) => { status = snapshot || status })
+  ipcMain.on('remote:status', (_event, snapshot) => { remoteStatus = snapshot || remoteStatus })
+  // A remote command's answer comes back on the same reply channel as requests.
+  ipcMain.on('remote:reply', (_event, { id, result }) => {
+    const resolve = pending.get(id)
+    if (resolve) { pending.delete(id); resolve(result) }
+  })
   // the library changed on disk - rebuild the page's song list next time it asks
   ipcMain.on('requests:library-changed', () => { library = null })
 
   // Only once requests have been used before: start listening again at launch.
   if (config.serverOn) startServer()
 
-  return { invalidateLibrary: () => { library = null } }
+  return {
+    invalidateLibrary: () => { library = null },
+    // tests only
+    close: () => new Promise((resolve) => (server ? server.close(() => { server = null; resolve() }) : resolve())),
+  }
 }

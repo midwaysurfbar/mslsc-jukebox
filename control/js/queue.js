@@ -137,6 +137,7 @@ function renderQueue() {
   list.querySelectorAll('[data-remove-idx]').forEach((el) => el.addEventListener('click', () => removeQueueItem(Number(el.dataset.removeIdx))))
   list.querySelectorAll('[data-play-from]').forEach((el) => el.addEventListener('click', () => playQueueFrom(Number(el.dataset.playFrom))))
   pushRequestStatus()
+  if (typeof pushRemoteStatus === 'function') pushRemoteStatus() // remote.js loads after this file
 }
 
 // Something is on screen (playing or paused) - Display is holding a position.

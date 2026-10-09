@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jukebox Remote</title>
+<link rel="stylesheet" href="/remote/remote.css">
+</head>
+<body>
+
+<!-- Set up (first use of this screen only) -->
+<section id="pair" class="pair" hidden>
+  <div class="pair-card">
+    <p class="eyebrow">Midway Jukebox</p>
+    <h1>Set up this remote</h1>
+    <p>On the Jukebox (or another remote): <b>Settings → Song request screens and remotes → Set up a remote</b>, then enter the 6-digit code it shows.</p>
+    <form id="pair-form" autocomplete="off">
+      <input id="pair-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" aria-label="Set-up code">
+      <button class="primary" type="submit">Set up</button>
+    </form>
+    <p class="pair-msg" id="pair-msg" role="status"></p>
+  </div>
+</section>
+
+<!-- The remote -->
+<main id="main" hidden>
+  <header class="top">
+    <div>
+      <p class="eyebrow">Midway Jukebox</p>
+      <h1>Remote</h1>
+    </div>
+    <span class="pill" id="conn">Connecting…</span>
+  </header>
+
+  <section class="now" aria-label="Now playing">
+    <div class="now-art" id="now-art"></div>
+    <div class="now-text">
+      <p class="eyebrow" id="now-label">Now playing</p>
+      <p class="now-title" id="now-title">Nothing playing</p>
+      <p class="now-artist" id="now-artist"></p>
+    </div>
+    <div class="progress">
+      <span id="time-elapsed">0:00</span>
+      <div class="bar" id="bar" role="slider" aria-label="Position in song" tabindex="0"><div class="bar-fill" id="bar-fill"></div></div>
+      <span id="time-total">0:00</span>
+    </div>
+    <div class="transport">
+      <button class="round" data-cmd="previous" aria-label="Previous song">⏮</button>
+      <button class="round big" id="toggle" data-cmd="toggle" aria-label="Play or pause">▶</button>
+      <button class="round" data-cmd="skip" aria-label="Skip to the next song">⏭</button>
+    </div>
+    <label class="volume"><span>Volume</span><input type="range" id="volume" min="0" max="100" step="5"><b id="volume-value">–</b></label>
+  </section>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="queue" class="on">Up next <span class="count" id="queue-count"></span></button>
+    <button role="tab" data-tab="search">Add songs</button>
+    <button role="tab" data-tab="playlists">Playlists</button>
+    <button role="tab" data-tab="screens">Requests &amp; screens</button>
+  </nav>
+
+  <section class="panel" id="tab-queue">
+    <div class="panel-actions">
+      <button class="secondary" data-cmd="shuffle">Shuffle up next</button>
+      <button class="danger" id="clear-btn">Clear up next</button>
+    </div>
+    <ol class="rows" id="queue-list"></ol>
+    <p class="note" id="queue-more"></p>
+  </section>
+
+  <section class="panel" id="tab-search" hidden>
+    <input class="search" id="search" type="search" placeholder="Search songs or artists" autocomplete="off">
+    <ol class="rows" id="search-list"></ol>
+    <p class="note" id="search-note"></p>
+  </section>
+
+  <section class="panel" id="tab-playlists" hidden>
+    <input class="search" id="pl-search" type="search" placeholder="Find a playlist" autocomplete="off">
+    <ol class="rows" id="pl-list"></ol>
+  </section>
+
+  <section class="panel" id="tab-screens" hidden>
+    <label class="switch-row">
+      <span><b>Song requests</b><br><span class="note" id="req-summary"></span></span>
+      <input type="checkbox" id="req-toggle" class="switch">
+    </label>
+    <div class="code-box" id="code-box" hidden>
+      <p id="code-intro"></p>
+      <p class="code-address" id="code-address"></p>
+      <p>then enter this code:</p>
+      <p class="code" id="code"></p>
+      <p class="note" id="code-expiry"></p>
+      <button class="secondary" id="code-done">Done</button>
+    </div>
+    <div class="panel-actions">
+      <button class="primary" data-pair="picker">Set up a touch screen</button>
+      <button class="secondary" data-pair="remote">Set up another remote</button>
+    </div>
+    <h2>Screens set up</h2>
+    <ol class="rows" id="device-list"></ol>
+    <p class="note" id="version"></p>
+  </section>
+</main>
+
+<div class="offline" id="offline" hidden>
+  <div>
+    <p class="offline-title">Can't reach the Jukebox</p>
+    <p>The venue PC may be off or restarting. This page reconnects by itself.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="/remote/remote.js"></script>
+</body>
+</html>

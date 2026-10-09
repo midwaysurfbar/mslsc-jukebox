@@ -129,12 +129,12 @@
         </div>
 
         <div class="settings-card">
-          <h2>Song request screens</h2>
-          <p class="eyebrow" style="margin-top:0">A touch screen anywhere in the club (the other PC, a tablet) can let people add songs to the queue. Only screens set up here can use it. Switch requests on and off on the Queue tab.</p>
+          <h2>Song request screens and remotes</h2>
+          <p class="eyebrow" style="margin-top:0">A touch screen anywhere in the club (the other PC, a tablet) can let people add songs to the queue. A remote gives staff full control of the Jukebox from another screen. Only screens set up here can use either. Switch requests on and off on the Queue tab.</p>
           <div id="requests-devices" class="web-ads-list"></div>
-          <div class="button-row"><button class="primary" id="pair-screen-btn">Set up a touch screen</button></div>
+          <div class="button-row"><button class="primary" id="pair-screen-btn">Set up a touch screen</button><button class="secondary" id="pair-remote-btn">Set up a remote</button></div>
           <div id="pairing-box" class="pairing-box" hidden>
-            <p>On the touch screen, open this address in the browser:</p>
+            <p id="pairing-intro">On the touch screen, open this address in the browser:</p>
             <p class="pairing-address" id="pairing-address"></p>
             <p>then enter this code:</p>
             <p class="pairing-code" id="pairing-code"></p>
@@ -211,6 +211,7 @@
   <script src="js/playlists.js"></script>
   <script src="js/player.js"></script>
   <script src="js/requests.js"></script>
+  <script src="js/remote.js"></script>
   <script src="js/init.js"></script>
 </body>
 </html>

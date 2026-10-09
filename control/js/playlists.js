@@ -64,6 +64,9 @@ async function appendPlaylistToQueue(playlistId) {
   if (!playlist) return
   queue.tracks.push(...playlist.trackKeys)
   await saveAndSyncQueue()
+  // Display plays its own copy of the list - without this, a playlist
+  // added mid-song never actually played (same fix as + Queue).
+  sendQueueToDisplay()
 }
 async function deletePlaylist(id) {
   playlists = await jukebox.deletePlaylist(id)

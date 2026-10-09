@@ -387,6 +387,7 @@ function startRequests() {
       readJson: store.readJson,
       writeJson: store.writeJson,
       listLibrary: () => library.listRequestLibrary(),
+      appVersion: app.getVersion(),
     })
   } catch (err) {
     // Requests are an extra - nothing about playing videos depends on them.
