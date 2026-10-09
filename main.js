@@ -171,7 +171,9 @@ function createDisplayWindow({ hidden = false } = {}) {
     width: target.bounds.width,
     height: target.bounds.height,
     frame: false,
-    fullscreen: !singleDisplay,
+    // A window created fullscreen is shown straight away on Linux, even with
+    // show:false - so a hidden TV window goes fullscreen when it's shown.
+    fullscreen: !singleDisplay && !hidden,
     alwaysOnTop: !singleDisplay,
     autoHideMenuBar: true,
     backgroundColor: '#000000',
