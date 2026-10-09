@@ -60,8 +60,13 @@
 <!-- Closed / idle -->
 <section id="closed" class="overlay" hidden>
   <div>
-    <h1>Requests are closed</h1>
-    <p>Enjoy the music!</p>
+    <h1 id="closed-title">Requests are closed</h1>
+    <p id="closed-text">Enjoy the music!</p>
+    <div class="next-opening" id="closed-next" hidden>
+      <span class="label">Next bar opening</span>
+      <strong id="closed-next-title"></strong>
+      <span id="closed-next-when"></span>
+    </div>
     <p class="overlay-now" id="closed-now"></p>
   </div>
 </section>

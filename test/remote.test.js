@@ -31,7 +31,7 @@ function fakeElectron() {
   return { ipcMain, handlers, listeners, sent, getControlWindow: () => win }
 }
 
-function start(t) {
+function start(t, extra = {}) {
   const userData = tempDir(t, 'remote')
   const store = createStore(userData)
   const fake = fakeElectron()
@@ -45,9 +45,23 @@ function start(t) {
     listLibrary: async () => [],
     appVersion: '9.9.9',
     port: PORT,
+    barCheckMs: 0, // no real bar checks in tests - see the bar tests below
+    ...extra,
   })
   t.after(() => api.close())
+  fake.api = api
   return fake
+}
+
+// A stand-in for the two Supabase bar functions.
+function fakeBar(state) {
+  return async (url) => {
+    if (state.fail) throw new Error('offline')
+    const body = url.endsWith('public-kiosk-state')
+      ? { ok: true, session: { is_open: state.open } }
+      : { ok: true, booking: state.booking || null }
+    return { json: async () => body }
+  }
 }
 
 const base = `http://127.0.0.1:${PORT}`
@@ -143,4 +157,48 @@ test('the remote page and its files are served', async (t) => {
     const res = await fetch(base + p)
     assert.equal(res.status, 200, p)
   }
+})
+
+test('the picker follows the bar: closed shows the next opening and refuses requests', async (t) => {
+  const bar = { open: false, booking: { title: 'Members Social Night', event_date: '2026-10-16', start_time: '17:00:00' } }
+  const fake = start(t, { fetchImpl: fakeBar(bar) })
+  const picker = await pair(fake, 'picker')
+  await fake.handlers['requests:set-enabled'](null, true)
+  await fake.api.checkBar()
+  let st = (await call('/api/status', { token: picker })).data
+  assert.equal(st.barAllows, false)
+  assert.deepEqual(st.nextOpening, { title: 'Members Social Night', date: '2026-10-16', time: '17:00' })
+  const refused = await call('/api/request', { token: picker, body: { key: 'a'.repeat(32) } })
+  assert.equal(refused.data.reason, 'bar-closed')
+
+  bar.open = true
+  await fake.api.checkBar()
+  st = (await call('/api/status', { token: picker })).data
+  assert.equal(st.barAllows, true)
+  assert.equal(st.nextOpening, null)
+})
+
+test('staff can turn off following the bar from a remote', async (t) => {
+  const fake = start(t, { fetchImpl: fakeBar({ open: false }) })
+  const remote = await pair(fake, 'remote')
+  await fake.api.checkBar()
+  assert.equal((await call('/api/remote/state', { token: remote })).data.requests.barAllows, false)
+  await call('/api/remote/command', { token: remote, body: { action: 'requests-follow-bar', args: { follow: false } } })
+  const r = (await call('/api/remote/state', { token: remote })).data.requests
+  assert.equal(r.followBar, false)
+  assert.equal(r.barAllows, true)
+})
+
+test('if the bar status can\'t be checked, the picker stays open', async (t) => {
+  const bar = { fail: true }
+  const fake = start(t, { fetchImpl: fakeBar(bar) })
+  const picker = await pair(fake, 'picker')
+  await fake.api.checkBar()
+  assert.equal((await call('/api/status', { token: picker })).data.barAllows, true)
+  // ...and once known closed, a later failed check keeps it closed
+  Object.assign(bar, { fail: false, open: false })
+  await fake.api.checkBar()
+  bar.fail = true
+  await fake.api.checkBar()
+  assert.equal((await call('/api/status', { token: picker })).data.barAllows, false)
 })

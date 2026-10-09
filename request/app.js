@@ -137,6 +137,7 @@ async function requestSong(track, button) {
     if (r.ok) toast(`Added! <small>“${esc(track.t)}” is number ${r.position} in the queue.</small>`, 'ok')
     else if (r.reason === 'full') toast('The queue is full right now.<small>Please wait a few minutes, then try again.</small>', 'warn')
     else if (r.reason === 'closed') toast('Requests are closed right now.', 'warn')
+    else if (r.reason === 'bar-closed') toast('The bar is closed right now.<small>Song requests open when the bar does.</small>', 'warn')
     else if (r.reason === 'queued') toast('That song is already in the queue!<small>It\'s on its way.</small>', 'warn')
     else if (r.reason === 'recent') toast(`That one played a moment ago.<small>Try it again in about ${r.minutes} minute${r.minutes === 1 ? '' : 's'}.</small>`, 'warn')
     else toast('That song can\'t be played right now.<small>Please pick another.</small>', 'warn')
@@ -159,6 +160,15 @@ function toast(html, kind) {
 $('toast').addEventListener('click', () => { $('toast').hidden = true })
 
 // ---- status ---------------------------------------------------------------
+// "Today · 17:00", "Tomorrow · 17:00" or "Saturday 11 October · 17:00"
+function whenText({ date, time }) {
+  const d = new Date(`${date}T00:00:00`)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const days = Math.round((d - today) / 86400000)
+  const day = days === 0 ? 'Today' : days === 1 ? 'Tomorrow'
+    : d.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'long' })
+  return time ? `${day} · ${time}` : day
+}
 function nowText(n) { return n ? `Now playing: ${n.title}${n.artist ? ` – ${n.artist}` : ''}` : '' }
 async function refreshStatus() {
   try {
@@ -174,7 +184,17 @@ async function refreshStatus() {
     pill.textContent = s.full ? 'Queue full – please wait' : 'Requests open'
     pill.classList.toggle('full', s.full)
     $('full-banner').hidden = !s.full
-    $('closed').hidden = s.enabled
+    // Bar closed (requests follow the bar's open/closed state) or switched
+    // off by staff - either way the picker shows the closed screen.
+    const barClosed = s.enabled && s.barAllows === false
+    $('closed').hidden = s.enabled && !barClosed
+    $('closed-title').textContent = barClosed ? 'Bar closed' : 'Requests are closed'
+    $('closed-text').textContent = barClosed ? 'Song requests open when the bar does.' : 'Enjoy the music!'
+    $('closed-next').hidden = !(barClosed && s.nextOpening)
+    if (barClosed && s.nextOpening) {
+      $('closed-next-title').textContent = s.nextOpening.title
+      $('closed-next-when').textContent = whenText(s.nextOpening)
+    }
     $('closed-now').textContent = nowText(s.nowPlaying)
     $('idle-now').textContent = nowText(s.nowPlaying)
     if (Boolean(wasFull) !== Boolean(s.full)) document.querySelectorAll('.song .add').forEach((b) => { b.disabled = s.full })

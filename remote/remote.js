@@ -248,6 +248,7 @@ $('pl-list').addEventListener('click', (e) => {
 })
 
 // ---------------------------------------------------------------- requests & screens
+$('bar-toggle').addEventListener('change', () => command('requests-follow-bar', { follow: $('bar-toggle').checked }, $('bar-toggle').checked ? 'Requests now follow the bar.' : 'Requests no longer follow the bar.'))
 $('req-toggle').addEventListener('change', () => command('requests-enabled', { enabled: $('req-toggle').checked }, $('req-toggle').checked ? 'Song requests are on.' : 'Song requests are off.'))
 document.querySelectorAll('[data-pair]').forEach((b) => b.addEventListener('click', () => command('pair', { kind: b.dataset.pair })))
 $('code-done').addEventListener('click', () => command('cancel-pair'))
@@ -263,7 +264,11 @@ let lastDevSig = ''
 function renderScreens() {
   const r = state.requests
   $('req-toggle').checked = r.enabled
-  $('req-summary').textContent = r.enabled ? `On - ${Math.min(r.waiting, r.maxWaiting)} of ${r.maxWaiting} places used` : 'Off - the song picker is closed. Songs added here aren\'t limited.'
+  $('bar-toggle').checked = r.followBar
+  const next = r.nextOpening ? ` Next opening: ${r.nextOpening.title}, ${r.nextOpening.date} ${r.nextOpening.time}.` : ''
+  $('req-summary').textContent = !r.enabled ? 'Off - the song picker is closed. Songs added here aren\'t limited.'
+    : !r.barAllows ? `On, but the bar is closed - the picker shows "Bar closed" until it opens.${next}`
+    : `On - ${Math.min(r.waiting, r.maxWaiting)} of ${r.maxWaiting} places used`
   const box = $('code-box')
   box.hidden = !r.pairing
   if (r.pairing) {

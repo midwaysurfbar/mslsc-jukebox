@@ -23,6 +23,15 @@
 // Every remote command is carried out BY the Control window (it still owns
 // the queue) - this file only relays it and the answer, like requests.
 //
+// Bar open/closed (Sam, 2026-10-09): by default requests only open while
+// the bar is open - the same open/closed state the Attendance sign-in kiosk
+// and the menu board show (public-kiosk-state), checked every 30 seconds.
+// While it's closed the picker shows "Bar closed" with the next opening
+// (public-next-bar-opening). Staff in Control and on the Remote are never
+// limited. If the check can't be made (internet down) the last answer
+// stands, and before any answer the bar counts as open - a dropped
+// connection must never shut the picker on a busy night.
+//
 // Safety: nothing here runs until requests are first switched on or a
 // screen is set up (so Windows never asks about network access before
 // then), every failure is caught and only reported in Control, and the
@@ -50,6 +59,9 @@ const PAGE_FILES = {
   '/remote/remote.css': ['remote/remote.css', 'text/css; charset=utf-8'],
 }
 const KINDS = new Set(['picker', 'remote'])
+const BAR_FN = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/'
+const BAR_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon key, same as the ads
+const BAR_CHECK_MS = 30000
 // Commands the main process answers itself; everything else goes to Control.
 const REMOTE_COMMANDS = new Set([
   'toggle', 'skip', 'previous', 'seek', 'volume',
@@ -57,9 +69,9 @@ const REMOTE_COMMANDS = new Set([
   'playlist-play', 'playlist-queue',
 ])
 
-module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, appVersion = '', port = PORT }) {
+module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, appVersion = '', port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS }) {
   const REQUESTS_PATH = path.join(userData, 'requests.json')
-  const load = () => ({ enabled: false, serverOn: false, devices: [], ...readJson(REQUESTS_PATH, {}) })
+  const load = () => ({ enabled: false, serverOn: false, followBar: true, devices: [], ...readJson(REQUESTS_PATH, {}) })
   let config = load()
   const save = () => writeJson(REQUESTS_PATH, config)
 
@@ -69,6 +81,46 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   let badPairAttempts = []
   let status = { nowPlaying: null, upNext: [], waiting: 0 }
   let remoteStatus = null // full snapshot for /remote, pushed by Control
+  let bar = { open: null, next: null, checkedAt: 0 } // open: true/false, null = not known yet
+  let barTimer = null
+
+  async function callBarFn(name) {
+    const res = await fetchImpl(BAR_FN + name, {
+      method: 'POST',
+      headers: { apikey: BAR_KEY, Authorization: `Bearer ${BAR_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(10000),
+    })
+    const data = await res.json()
+    if (!data || !data.ok) throw new Error('bar status unavailable')
+    return data
+  }
+  async function checkBar() {
+    try {
+      const open = Boolean((await callBarFn('public-kiosk-state')).session?.is_open)
+      let next = null
+      if (!open) {
+        const b = (await callBarFn('public-next-bar-opening').catch(() => ({}))).booking
+        if (b) next = { title: b.title || 'Bar opening', date: b.event_date, time: String(b.start_time || '').slice(0, 5) }
+      }
+      const changed = open !== bar.open || JSON.stringify(next) !== JSON.stringify(bar.next)
+      bar = { open, next, checkedAt: Date.now() }
+      if (changed) notifyControl()
+    } catch {
+      // keep the last answer - see the note at the top
+    }
+  }
+  function startBarChecks() {
+    if (barTimer || !barCheckMs) return
+    checkBar()
+    barTimer = setInterval(checkBar, barCheckMs)
+  }
+  // Requests are open to the picker when switched on AND (if following the
+  // bar) the bar isn't known to be closed.
+  const barAllows = () => config.followBar === false || bar.open !== false
+  function barState() {
+    return { followBar: config.followBar !== false, barOpen: bar.open, barAllows: barAllows(), nextOpening: bar.open === false ? bar.next : null }
+  }
   let library = null
   let libraryBuiltAt = 0
   const pending = new Map() // request id -> resolve
@@ -92,6 +144,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       devices: config.devices.map(({ id, name, pairedAt, lastSeen, kind }) => ({ id, name, pairedAt, lastSeen, kind: kind || 'picker' })),
       pairing,
       maxWaiting: MAX_WAITING,
+      ...barState(),
     }
   }
 
@@ -165,6 +218,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       maxWaiting: MAX_WAITING,
       devices: st.devices.map(({ id, name, lastSeen, kind }) => ({ id, name, lastSeen, kind })),
       pairing: st.pairing,
+      ...barState(),
       address: st.addresses.find((a) => /\/\/(192\.168|10\.|172\.)/.test(a)) || st.addresses[0] || '',
     }
   }
@@ -179,6 +233,12 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       if (action === 'requests-enabled') {
         config.enabled = Boolean(a.enabled)
         if (config.enabled) config.serverOn = true
+        save()
+        notifyControl()
+        return send(res, 200, { ok: true })
+      }
+      if (action === 'requests-follow-bar') {
+        config.followBar = Boolean(a.follow)
         save()
         notifyControl()
         return send(res, 200, { ok: true })
@@ -263,6 +323,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       return send(res, 200, {
         ok: true,
         enabled: config.enabled,
+        ...barState(),
         full: config.enabled && status.waiting >= MAX_WAITING,
         waiting: status.waiting,
         maxWaiting: MAX_WAITING,
@@ -288,6 +349,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
 
     if (req.method === 'POST' && url.pathname === '/api/request') {
       if (!config.enabled) return send(res, 200, { ok: false, reason: 'closed' })
+      if (!barAllows()) return send(res, 200, { ok: false, reason: 'bar-closed' })
       const { key } = await readBody(req)
       const clean = String(key || '').replace(/[^a-f0-9]/gi, '')
       if (!clean) return send(res, 400, { ok: false, reason: 'unavailable' })
@@ -314,7 +376,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       server = null
       notifyControl()
     })
-    s.listen(port, '0.0.0.0', () => { server = s; notifyControl() })
+    s.listen(port, '0.0.0.0', () => { server = s; notifyControl(); startBarChecks() })
   }
 
   // ---- IPC with Control ----------------------------------------------------
@@ -355,6 +417,11 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   return {
     invalidateLibrary: () => { library = null },
     // tests only
-    close: () => new Promise((resolve) => (server ? server.close(() => { server = null; resolve() }) : resolve())),
+    checkBar,
+    close: () => new Promise((resolve) => {
+      clearInterval(barTimer)
+      barTimer = null
+      return server ? server.close(() => { server = null; resolve() }) : resolve()
+    }),
   }
 }

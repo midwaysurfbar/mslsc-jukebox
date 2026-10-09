@@ -130,6 +130,12 @@ body.kb-open #main{padding-bottom:460px}
   text-shadow:0 0 8px #fff,0 0 22px var(--amber),0 0 50px #ff5a2b}
 .overlay p{font-size:clamp(20px,2.6vw,32px);color:var(--ink);margin:22px 0 0;font-family:"Special Elite",Barlow,sans-serif}
 .overlay .overlay-now{color:var(--muted);font-size:clamp(18px,2vw,24px);margin-top:36px}
+/* next bar opening on the closed screen - a lit paper title strip */
+.next-opening{display:inline-grid;gap:6px;margin-top:34px;padding:18px 34px;background:var(--paper);color:var(--paper-ink);border-radius:12px;
+  border-top:10px solid var(--rule);border-bottom:10px solid var(--rule);box-shadow:0 0 30px #ffb23855,0 14px 30px #000a}
+.next-opening .label{font-weight:800;text-transform:uppercase;letter-spacing:.14em;font-size:15px;color:var(--rule)}
+.next-opening strong{font-family:Anton,Barlow,sans-serif;font-weight:400;font-size:clamp(26px,3.4vw,42px);letter-spacing:.02em}
+.next-opening span:last-child{font-family:"Special Elite",Barlow,sans-serif;font-size:clamp(18px,2.2vw,26px)}
 /* closed always wins over the idle "Pick a song" screen */
 #closed{z-index:45}
 .idle h1{animation:neon 3.5s ease-in-out infinite}

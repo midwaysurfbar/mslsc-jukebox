@@ -116,6 +116,8 @@ function renderRequestsUi() {
   const requests = waitingRequestIndexes().length
   document.getElementById('requests-summary').textContent = !st.enabled
     ? 'Off - the song picker is closed. Songs added here aren\'t limited.'
+    : st.barAllows === false
+    ? 'On, but the bar is closed - the picker shows "Bar closed" until the bar opens. Songs added here aren\'t limited.'
     : `On - ${Math.min(waiting, st.maxWaiting)} of ${st.maxWaiting} places used${waiting >= st.maxWaiting ? ' (full - the picker says please wait)' : ''}${requests ? ` · ${requests} request${requests === 1 ? '' : 's'} waiting` : ''}${st.devices.length ? '' : ' · no touch screen set up yet (see Settings)'}`
   document.getElementById('clear-requests-btn').hidden = !requests
 
