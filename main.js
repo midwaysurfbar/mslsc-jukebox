@@ -18,6 +18,7 @@ const { createWebAds } = require('./lib/web-ads')
 const { createMediaWatch } = require('./lib/media-watch')
 const { createInboxSorter } = require('./lib/inbox-sorter')
 const { createUpdates } = require('./lib/updates')
+const { createLibraryManager } = require('./lib/library-manager')
 
 // Deck videos play unmuted (to the venue's Bluetooth sound system), so
 // allow autoplay without a gesture.
@@ -72,6 +73,25 @@ const inboxSorter = createInboxSorter({
   },
 })
 setInterval(() => { inboxSorter.run().catch(() => {}) }, 15 * 1000)
+
+// Library Manager (Sam, 2026-10-11): tidying the library from a laptop
+// (requests.js serves the page). It changes files itself, then tells
+// Control which songs changed key or went, so the queue follows them, and
+// the song picker / Remote fetch the new list.
+let playingNowKey = null
+const libraryManager = createLibraryManager({
+  store,
+  library,
+  ffmpegPath: FFMPEG_PATH,
+  playingKey: () => playingNowKey,
+  onChanged: (change) => {
+    if (requests) requests.invalidateLibrary()
+    sendToControl('library:changed-elsewhere', change)
+  },
+})
+// deleted songs are kept 30 days, then really deleted
+setTimeout(() => { try { libraryManager.purgeExpired() } catch { /* next time */ } }, 60 * 1000)
+setInterval(() => { try { libraryManager.purgeExpired() } catch { /* next time */ } }, 6 * 60 * 60 * 1000)
 
 // --- Windows ---
 
@@ -374,7 +394,10 @@ const PLAYER_COMMANDS = ['load-queue', 'update-queue', 'play', 'pause', 'toggle-
 for (const command of PLAYER_COMMANDS) {
   ipcMain.on(`player:${command}`, (_event, payload) => sendToDisplay(`player:${command}`, payload))
 }
-ipcMain.on('player:state', (_event, state) => sendToControl('player:state', state))
+ipcMain.on('player:state', (_event, state) => {
+  playingNowKey = state && state.status !== 'idle' && state.currentTrack ? state.currentTrack.key : null
+  sendToControl('player:state', state)
+})
 
 // Same as the tray's "Show on TV", as a button in Control itself.
 ipcMain.handle('display:reopen', () => {
@@ -435,6 +458,7 @@ function startRequests() {
       listLibrary: () => library.listRequestLibrary(),
       videoPath: (key) => library.videoPathForKey(key),
       appVersion: app.getVersion(),
+      libraryManager,
       // The Remote's Show on TV / Hide TV
       tv: {
         visible: () => alive(displayWindow) && displayWindow.isVisible() && tvMode === 'videos',

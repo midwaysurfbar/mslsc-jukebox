@@ -130,7 +130,8 @@ function renderPlaylists() {
   }
 
   container.className = 'playlist-tiles'
-  container.innerHTML = playlists.map((p) => `
+  // a folder turned into a normal playlist on the Library page is hidden
+  container.innerHTML = playlists.filter((p) => !p.hidden).map((p) => `
     <div class="playlist-tile" data-open-playlist="${p.id}">
       <strong>${esc(p.name)}${p.autoFolder ? ' <span class="auto-tag">📁</span>' : p.autoArtist ? ' <span class="auto-tag">🎤</span>' : ''}</strong>
       <div class="track-meta">${p.trackKeys.length} track${p.trackKeys.length === 1 ? '' : 's'}</div>

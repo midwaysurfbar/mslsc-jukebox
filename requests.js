@@ -32,6 +32,12 @@
 // stands, and before any answer the bar counts as open - a dropped
 // connection must never shut the picker on a busy night.
 //
+// Library Manager (Sam, 2026-10-11): /library is a page for tidying the
+// music library from a laptop (rename, delete, duplicates, playlists - see
+// lib/library-manager.js). Laptops pair with their own code like a remote,
+// and its commands only answer a paired laptop coming in over Tailscale
+// (100.64.0.0/10) - never the club Wi-Fi, a touch screen or a remote.
+//
 // Safety: nothing here runs until requests are first switched on or a
 // screen is set up (so Windows never asks about network access before
 // then), every failure is caught and only reported in Control, and the
@@ -57,6 +63,10 @@ const PAGE_FILES = {
   '/remote/': ['remote/index.html', 'text/html; charset=utf-8'],
   '/remote/remote.js': ['remote/remote.js', 'text/javascript; charset=utf-8'],
   '/remote/remote.css': ['remote/remote.css', 'text/css; charset=utf-8'],
+  '/library': ['library/index.html', 'text/html; charset=utf-8'],
+  '/library/': ['library/index.html', 'text/html; charset=utf-8'],
+  '/library/library.js': ['library/library.js', 'text/javascript; charset=utf-8'],
+  '/library/library.css': ['library/library.css', 'text/css; charset=utf-8'],
 }
 // the shared club "retro surf" fonts (2026-10-10), served locally so the
 // touchscreen never needs the internet for them
@@ -64,7 +74,8 @@ for (const f of ['shrikhand-400', 'barlow-500', 'barlow-600', 'barlow-700', 'bar
   PAGE_FILES[`/fonts/${f}.woff2`] = [`request/fonts/${f}.woff2`, 'font/woff2']
 }
 PAGE_FILES['/fonts/surf-fonts.css'] = ['request/fonts/surf-fonts.css', 'text/css; charset=utf-8']
-const KINDS = new Set(['picker', 'remote'])
+const KINDS = new Set(['picker', 'remote', 'library'])
+const KIND_NAMES = { picker: 'Touch screen', remote: 'Remote', library: 'Laptop' }
 const BAR_FN = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/'
 const BAR_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon key, same as the ads
 const BAR_CHECK_MS = 30000
@@ -75,7 +86,14 @@ const REMOTE_COMMANDS = new Set([
   'playlist-play', 'playlist-queue',
 ])
 
-module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, videoPath = () => null, appVersion = '', tv = null, port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS }) {
+// A Tailscale address (100.64.0.0/10) - how the laptops reach the venue PC.
+function isTailnet(address) {
+  const m = /^(?:::ffff:)?100\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(String(address || ''))
+  return Boolean(m && Number(m[1]) >= 64 && Number(m[1]) <= 127)
+}
+const isLoopback = (address) => /^(?:::ffff:)?127\.|^::1$/.test(String(address || ''))
+
+module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, videoPath = () => null, appVersion = '', tv = null, port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS, libraryManager = null, allowLocalLibrary = false }) {
   const REQUESTS_PATH = path.join(userData, 'requests.json')
   const load = () => ({ enabled: false, serverOn: false, followBar: true, devices: [], ...readJson(REQUESTS_PATH, {}) })
   let config = load()
@@ -188,6 +206,9 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   }
   let library = null
   let libraryBuiltAt = 0
+  // goes up whenever the library changes, so the song picker and the
+  // Remote know to fetch the song list again
+  let libraryVersion = 1
   const pending = new Map() // request id -> resolve
 
   function addresses() {
@@ -209,8 +230,13 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       devices: config.devices.map(({ id, name, pairedAt, lastSeen, kind }) => ({ id, name, pairedAt, lastSeen, kind: kind || 'picker' })),
       pairing,
       maxWaiting: MAX_WAITING,
+      tailnetAddress: tailnetAddress(),
       ...barState(),
     }
+  }
+  function tailnetAddress() {
+    const a = addresses().find((x) => isTailnet(x.replace(/^http:\/\//, '').replace(/:\d+$/, '')))
+    return a ? `${a}/library` : ''
   }
 
   function notifyControl() {
@@ -247,10 +273,10 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     })
   }
 
-  function readBody(req) {
+  function readBody(req, limit = 4096) {
     return new Promise((resolve) => {
       let data = ''
-      req.on('data', (chunk) => { data += chunk; if (data.length > 4096) req.destroy() })
+      req.on('data', (chunk) => { data += chunk; if (data.length > limit) req.destroy() })
       req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch { resolve({}) } })
       req.on('error', () => resolve({}))
     })
@@ -308,12 +334,13 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       pairing: st.pairing,
       ...barState(),
       address: st.addresses.find((a) => /\/\/(192\.168|10\.|172\.)/.test(a)) || st.addresses[0] || '',
+      tailnetAddress: st.tailnetAddress,
     }
   }
 
   async function handleRemote(req, res, url, device) {
     if (req.method === 'GET' && url.pathname === '/api/remote/state') {
-      return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState(), tv: tv ? { visible: Boolean(tv.visible()), mode: tv.mode ? tv.mode() : (tv.visible() ? 'videos' : 'blank') } : null })
+      return send(res, 200, { ok: true, version: appVersion, libraryVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState(), tv: tv ? { visible: Boolean(tv.visible()), mode: tv.mode ? tv.mode() : (tv.visible() ? 'videos' : 'blank') } : null })
     }
     // The Remote's little muted previews of what's playing and what's next.
     if (req.method === 'GET' && url.pathname === '/api/remote/video') {
@@ -367,6 +394,53 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     return send(res, 404, { ok: false, error: 'Not found' })
   }
 
+  function libraryAllowed(req) {
+    const ip = req.socket.remoteAddress
+    return isTailnet(ip) || (allowLocalLibrary && isLoopback(ip))
+  }
+
+  // ---- Library Manager (laptops on Tailscale only - see the top) ----
+  async function handleLibrary(req, res, url, device) {
+    const m = libraryManager
+    const by = device.name
+    const reply = async (fn) => {
+      try { return send(res, 200, await fn()) } catch (err) { return send(res, 200, { ok: false, error: err.message || 'That didn\'t work.' }) }
+    }
+    const route = `${req.method} ${url.pathname}`
+    if (route === 'GET /api/lib/video') {
+      const file = videoPath(String(url.searchParams.get('k') || '').replace(/[^a-f0-9]/gi, ''))
+      if (!file) return send(res, 404, 'Not found', 'text/plain')
+      return streamVideo(req, res, file)
+    }
+    if (req.method === 'GET') {
+      if (url.pathname === '/api/lib/songs') return reply(async () => ({ ok: true, songs: await m.list(), ...(await m.folders()), you: device.name, version: appVersion, libraryVersion }))
+      if (url.pathname === '/api/lib/duplicates') return reply(async () => ({ ok: true, ...(await m.duplicates()) }))
+      if (url.pathname === '/api/lib/playlists') return reply(async () => ({ ok: true, playlists: m.playlists() }))
+      if (url.pathname === '/api/lib/history') return reply(async () => ({ ok: true, history: m.history() }))
+      if (url.pathname === '/api/lib/sort') return reply(async () => ({ ok: true, sort: m.sortStatus() }))
+      return send(res, 404, { ok: false, error: 'Not found' })
+    }
+    if (req.method !== 'POST') return send(res, 404, { ok: false, error: 'Not found' })
+    const body = await readBody(req, 1024 * 1024)
+    switch (url.pathname) {
+      case '/api/lib/edit': return reply(() => m.edit(body, by))
+      case '/api/lib/move': return reply(() => m.move(body.keys, body.folder, by))
+      case '/api/lib/delete': return reply(() => m.removeSongs(body.keys, by))
+      case '/api/lib/undo': return reply(() => m.undo(String(body.id || ''), by))
+      case '/api/lib/duplicates/resolve': return reply(() => m.resolveDuplicate(body, by))
+      case '/api/lib/duplicates/exact-all': return reply(() => m.removeAllExact(by))
+      case '/api/lib/duplicates/ignore': return reply(async () => m.ignoreDuplicate(body.keys))
+      case '/api/lib/folder-playlists': return reply(() => m.makeFoldersNormal(body.ids, by))
+      case '/api/lib/playlist': return reply(() => m.playlistAction(body, by))
+      case '/api/lib/sort':
+        if (body.action === 'start') return reply(async () => ({ ok: true, sort: await m.startSort(body.folders) }))
+        if (body.action === 'stop') return reply(async () => ({ ok: true, sort: m.stopSort() }))
+        if (body.action === 'apply') return reply(() => m.applySort(by))
+        return send(res, 400, { ok: false, error: 'Unknown sort action.' })
+      default: return send(res, 404, { ok: false, error: 'Not found' })
+    }
+  }
+
   function askControl(key) {
     const win = getControlWindow()
     if (!win || win.isDestroyed()) return Promise.resolve({ ok: false, reason: 'unavailable' })
@@ -391,24 +465,28 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       const now = Date.now()
       badPairAttempts = badPairAttempts.filter((t) => now - t < 60000)
       if (badPairAttempts.length >= 10) return send(res, 429, { ok: false, error: 'Too many tries - wait a minute and try again.' })
-      const { code, kind: wanted } = await readBody(req)
+      const { code, kind: wanted, name: wantedName } = await readBody(req)
       if (!pairing || now > pairing.expiresAt || String(code || '') !== pairing.code) {
         badPairAttempts.push(now)
         return send(res, 403, { ok: false, error: 'That code isn\'t right, or has expired. Get a new one from the Jukebox.' })
       }
-      // A remote's code only sets up a remote, and a song picker's only a picker.
-      const kind = wanted === 'remote' ? 'remote' : 'picker'
+      // A remote's code only sets up a remote, a laptop's a laptop, and a
+      // song picker's only a picker.
+      const kind = KINDS.has(wanted) ? wanted : 'picker'
       if (kind !== pairing.kind) {
         badPairAttempts.push(now)
-        return send(res, 403, { ok: false, error: kind === 'remote'
-          ? 'That code is for a song-picker screen. On the Jukebox choose "Set up a remote" instead.'
-          : 'That code is for a remote. On the Jukebox choose "Set up a touch screen" instead.' })
+        const want = { picker: 'Set up a touch screen', remote: 'Set up a remote', library: 'Set up a laptop' }[kind]
+        return send(res, 403, { ok: false, error: `That code is for a ${KIND_NAMES[pairing.kind].toLowerCase()}. On the Jukebox or the Remote choose "${want}" instead.` })
+      }
+      if (kind === 'library' && !libraryAllowed(req)) {
+        return send(res, 403, { ok: false, error: 'Laptops can only be set up over Tailscale - turn Tailscale on and open the Tailscale address.' })
       }
       const sameKind = config.devices.filter((d) => (d.kind || 'picker') === kind).length
+      const typedName = String(wantedName || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 30)
       const device = {
         id: crypto.randomUUID(),
         token: crypto.randomBytes(24).toString('hex'),
-        name: kind === 'remote' ? `Remote ${sameKind + 1}` : `Touch screen ${sameKind + 1}`,
+        name: (kind === 'library' && typedName) || `${KIND_NAMES[kind]} ${sameKind + 1}`,
         kind,
         pairedAt: now,
         lastSeen: now,
@@ -427,6 +505,12 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       if (device.kind !== 'remote') return send(res, 403, { ok: false, error: 'not-a-remote' })
       return handleRemote(req, res, url, device)
     }
+    if (url.pathname.startsWith('/api/lib/')) {
+      if (device.kind !== 'library') return send(res, 403, { ok: false, error: 'not-a-laptop' })
+      if (!libraryAllowed(req)) return send(res, 403, { ok: false, error: 'The Library page only works over Tailscale.' })
+      if (!libraryManager) return send(res, 503, { ok: false, error: 'The Library Manager isn\'t running on this Jukebox.' })
+      return handleLibrary(req, res, url, device)
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return send(res, 200, {
@@ -439,6 +523,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
         nowPlaying: status.nowPlaying,
         paused: Boolean(status.paused),
         upNext: status.upNext,
+        libraryVersion,
       })
     }
 
@@ -541,13 +626,14 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     if (resolve) { pending.delete(id); resolve(result) }
   })
   // the library changed on disk - rebuild the page's song list next time it asks
-  ipcMain.on('requests:library-changed', () => { library = null })
+  ipcMain.on('requests:library-changed', () => { library = null; libraryVersion += 1 })
 
   // Only once requests have been used before: start listening again at launch.
   if (config.serverOn) startServer()
 
   return {
-    invalidateLibrary: () => { library = null },
+    invalidateLibrary: () => { library = null; libraryVersion += 1 },
+    setLibraryManager: (manager) => { libraryManager = manager },
     tickSuggestions,
     // tests only
     checkBar,

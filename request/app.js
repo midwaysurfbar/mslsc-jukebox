@@ -189,6 +189,12 @@ async function refreshStatus() {
     if (!s.ok) return
     const wasFull = status && status.full
     status = s
+    // the library was tidied (Library page on a laptop) - new list once
+    // nobody's mid-browse: now if the screen is idle, else at the reset
+    if (s.libraryVersion && s.libraryVersion !== seenLibraryVersion) {
+      if (seenLibraryVersion) { libraryStale = true; if (!$('idle').hidden) { libraryStale = false; loadLibrary().catch(() => {}) } }
+      seenLibraryVersion = s.libraryVersion
+    }
     document.querySelector('.now .label').textContent = s.nowPlaying && s.paused ? 'Paused' : 'Now playing'
     $('now-title').textContent = s.nowPlaying ? s.nowPlaying.title : 'Nothing playing right now'
     $('now-artist').textContent = s.nowPlaying ? s.nowPlaying.artist : 'Pick a song to get it started!'
@@ -323,7 +329,10 @@ $('kb-done').addEventListener('click', () => {
 
 // ---- idle: back to "Pick a song" after a minute untouched -----------------
 let idleTimer
+let seenLibraryVersion = 0
+let libraryStale = false
 function resetToStart() {
+  if (libraryStale) { libraryStale = false; loadLibrary().catch(() => {}) }
   query = ''; decade = ''; letter = ''
   $('suggest').hidden = true; kbTarget = 'search'
   setKeyboard(false); $('toast').hidden = true

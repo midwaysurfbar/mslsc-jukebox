@@ -40,7 +40,7 @@ function pushRemoteStatus() {
     tvStartHidden: Boolean(settings.tvStartHidden),
     upcoming: rows,
     upcomingTotal: Math.max(0, queue.tracks.length - from),
-    playlists: playlists.map((p) => ({ id: p.id, name: p.name, n: p.trackKeys.length })),
+    playlists: playlists.filter((p) => !p.hidden).map((p) => ({ id: p.id, name: p.name, n: p.trackKeys.length })),
     librarySize: library.length,
   }
   const sig = JSON.stringify(snapshot)

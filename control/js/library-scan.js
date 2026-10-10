@@ -188,6 +188,32 @@ jukebox.onMediaFolderChanged(() => {
   runLibraryOp(() => { folderRescanQueued = false; return rescanLibrary() })
 })
 
+// The Library page on a laptop changed something (lib/library-manager.js):
+// renamed or moved songs get a new key, deleted ones are gone, and a
+// removed duplicate's place goes to the copy that was kept. The queue
+// follows straight away (this window owns it), then a normal rescan picks
+// up the files, names and playlists.
+jukebox.onLibraryChangedElsewhere(({ pairs = {}, removed = [], playlistsOnly = false }) => {
+  const gone = new Set(removed)
+  if (Object.keys(pairs).length || gone.size) {
+    const removedBefore = queue.tracks.slice(0, queue.currentIndex).filter((k) => gone.has(k)).length
+    queue.tracks = queue.tracks.map((k) => pairs[k] || k).filter((k) => !gone.has(k))
+    queue.currentIndex = Math.max(0, queue.currentIndex - removedBefore) // same rule as purgeDerivedState
+    jukebox.saveQueue(queue)
+  }
+  runLibraryOp(async () => {
+    if (playlistsOnly) {
+      playlists = await jukebox.getPlaylists()
+      renderPlaylists()
+      renderLibrary()
+      return
+    }
+    await rescanLibrary()
+    renderQueue()
+    sendQueueToDisplay()
+  })
+})
+
 // Reconciles a fresh main-process file listing (from a move/sort action,
 // not a full Rescan) with the client's existing `library` array, which
 // carries client-only UI state - duration, thumbPath, convertedPath,

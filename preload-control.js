@@ -108,6 +108,9 @@ contextBridge.exposeInMainWorld('jukebox', {
   // files, all of it - so Control can silently re-run the same scan
   // Rescan Folder triggers manually, without anyone having to click it.
   onMediaFolderChanged: (callback) => ipcRenderer.on('media-folder:changed', () => callback()),
+  // The Library page on a laptop renamed, moved or deleted songs (or
+  // changed playlists) - { pairs: {oldKey: newKey}, removed: [keys], playlistsOnly }
+  onLibraryChangedElsewhere: (callback) => ipcRenderer.on('library:changed-elsewhere', (_event, change) => callback(change || {})),
 
   // Auto-update (Settings tab's "Check for Updates" button + status line).
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),

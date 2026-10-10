@@ -19,7 +19,9 @@ function describeTrack(key) {
   if (!track) return null
   const guess = guessArtistTitle(track.filename)
   const meta = metadataCache[key]
-  return { title: guess.title, artist: meta && meta.artist && meta.artist !== 'Unknown' ? meta.artist : guess.artist }
+  // a name typed on the Library page wins (same as describeFile in ../lib/library.js)
+  const title = (meta && meta.confidence === 'manual' && meta.title) || guess.title
+  return { title, artist: meta && meta.artist && meta.artist !== 'Unknown' ? meta.artist : guess.artist }
 }
 // Index of the first song still to come (after whatever is on screen, or
 // finished last).
@@ -128,7 +130,7 @@ function renderRequestsUi() {
 
   const list = document.getElementById('requests-devices')
   list.innerHTML = st.devices.length
-    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${esc(d.name)}</b> · ${d.kind === 'remote' ? 'staff remote' : 'song picker'} · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${esc(d.id)}">Remove</button></div>`).join('')
+    ? st.devices.map((d) => `<div class="web-ad-row"><span><b>${esc(d.name)}</b> · ${d.kind === 'remote' ? 'staff remote' : d.kind === 'library' ? 'Library laptop' : 'song picker'} · ${timeAgo(d.lastSeen)}</span><button class="danger" data-remove-device="${esc(d.id)}">Remove</button></div>`).join('')
     : '<p class="eyebrow" style="margin:0">No touch screens or remotes set up yet.</p>'
   list.querySelectorAll('[data-remove-device]').forEach((el) => el.addEventListener('click', async () => {
     if (!confirm('Remove this screen? It will need setting up again before it can be used.')) return
@@ -141,8 +143,9 @@ function renderRequestsUi() {
   if (st.pairing) {
     const address = st.addresses.find((a) => /\/\/(192\.168|10\.|172\.)/.test(a)) || st.addresses[0] || `http://<this PC's address>:${st.port}`
     const remote = st.pairing.kind === 'remote'
-    document.getElementById('pairing-intro').textContent = remote ? 'On the remote screen (another PC, phone or tablet), open this address in the browser:' : 'On the touch screen, open this address in the browser:'
-    document.getElementById('pairing-address').textContent = remote ? `${address}/remote` : address
+    const laptop = st.pairing.kind === 'library'
+    document.getElementById('pairing-intro').textContent = laptop ? 'On the laptop, with Tailscale on, open this address in the browser:' : remote ? 'On the remote screen (another PC, phone or tablet), open this address in the browser:' : 'On the touch screen, open this address in the browser:'
+    document.getElementById('pairing-address').textContent = laptop ? (st.tailnetAddress || 'http://<this PC\'s Tailscale address>:4610/library') : remote ? `${address}/remote` : address
     document.getElementById('pairing-code').textContent = st.pairing.code
     const mins = Math.max(0, Math.ceil((st.pairing.expiresAt - Date.now()) / 60000))
     document.getElementById('pairing-expiry').textContent = `This code works for ${mins} more minute${mins === 1 ? '' : 's'}.`
@@ -180,6 +183,10 @@ document.getElementById('pair-screen-btn').addEventListener('click', async () =>
 })
 document.getElementById('pair-remote-btn').addEventListener('click', async () => {
   requestsState = await jukebox.startRequestPairing('remote')
+  renderRequestsUi()
+})
+document.getElementById('pair-laptop-btn').addEventListener('click', async () => {
+  requestsState = await jukebox.startRequestPairing('library')
   renderRequestsUi()
 })
 document.getElementById('cancel-pairing-btn').addEventListener('click', async () => {

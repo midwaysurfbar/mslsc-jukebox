@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jukebox Library</title>
+<link rel="stylesheet" href="/fonts/surf-fonts.css">
+<link rel="stylesheet" href="/library/library.css">
+</head>
+<body>
+
+<!-- Set up (first use on this laptop only) -->
+<section id="pair" class="pair" hidden>
+  <div class="pair-card">
+    <div class="stripes" aria-hidden="true"></div>
+    <p class="eyebrow">Midway Jukebox</p>
+    <h1 class="wordmark">Library</h1>
+    <p>Tidy up the music videos from this laptop: names, duplicates, playlists. Every change shows up on the song picker straight away.</p>
+    <p>On the Remote (<b>Requests &amp; screens → Set up a laptop</b>) or the Jukebox (<b>Settings → Set up a laptop</b>), get a 6-digit code and enter it here.</p>
+    <form id="pair-form" autocomplete="off">
+      <label class="field"><span>Name this laptop</span><input id="pair-name" maxlength="30" placeholder="e.g. Sam's MacBook"></label>
+      <label class="field"><span>Set-up code</span><input id="pair-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000"></label>
+      <button class="primary" type="submit">Set up this laptop</button>
+    </form>
+    <p class="pair-msg" id="pair-msg" role="status"></p>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand">
+      <p class="eyebrow">Midway Jukebox</p>
+      <h1 class="wordmark">Library</h1>
+    </div>
+    <div class="top-stats" id="top-stats"></div>
+    <span class="pill" id="conn">Connecting…</span>
+  </header>
+  <div class="stripes" aria-hidden="true"></div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="songs" class="on">Songs</button>
+    <button role="tab" data-tab="dupes">Duplicates <span class="count" id="dupe-count"></span></button>
+    <button role="tab" data-tab="playlists">Playlists</button>
+    <button role="tab" data-tab="sort">Sort into decades</button>
+    <button role="tab" data-tab="history">History</button>
+  </nav>
+
+  <!-- ============================== Songs -->
+  <main class="panel" id="tab-songs">
+    <div class="toolbar">
+      <input class="search" id="q" type="search" placeholder="Search by song, singer or band, or file name" autocomplete="off">
+      <select id="folder-filter" aria-label="Folder"></select>
+      <select id="fix-filter" aria-label="Show">
+        <option value="">All songs</option>
+        <option value="noartist">No singer or band</option>
+        <option value="guess">Singer or band is a guess</option>
+        <option value="nodecade">No decade</option>
+        <option value="bad">Can't be played</option>
+        <option value="queued">In the queue now</option>
+      </select>
+    </div>
+    <p class="result-line" id="result-line"></p>
+    <div class="bulk" id="bulk" hidden>
+      <b id="bulk-count"></b>
+      <select id="bulk-move" aria-label="Move the chosen songs"><option value="">Move to…</option></select>
+      <select id="bulk-playlist" aria-label="Add the chosen songs to a playlist"><option value="">Add to playlist…</option></select>
+      <button class="danger" id="bulk-delete">Delete</button>
+      <button class="link" id="bulk-clear">Clear</button>
+    </div>
+    <div class="table" role="table" aria-label="Songs">
+      <div class="thead" role="row">
+        <span role="columnheader"><input type="checkbox" id="check-all" aria-label="Choose every song shown"></span>
+        <span role="columnheader"></span>
+        <span role="columnheader">Song</span>
+        <span role="columnheader">Decade</span>
+        <span role="columnheader">Folder</span>
+        <span role="columnheader" class="num">Length</span>
+      </div>
+      <div id="song-rows"></div>
+      <div id="song-more" class="more"></div>
+    </div>
+  </main>
+
+  <!-- ============================== Duplicates -->
+  <main class="panel" id="tab-dupes" hidden>
+    <div class="intro-card">
+      <h2 id="dupe-head">Looking for copies…</h2>
+      <p class="note" id="dupe-sub"></p>
+      <p class="note" id="dupe-probe"></p>
+      <div class="actions"><button class="primary" id="exact-all" hidden></button></div>
+    </div>
+    <div class="intro-card warn" id="copy-folders" hidden>
+      <h2>Keep these folders as playlists first</h2>
+      <p>These folders are playlists made of <b>copies</b> of songs. Turn them into normal playlists and they keep every song when the copies are deleted.</p>
+      <div id="copy-folder-list" class="checks"></div>
+      <div class="actions"><button class="primary" id="copy-folders-go">Make them normal playlists</button></div>
+    </div>
+    <div class="seg" role="radiogroup" aria-label="Show">
+      <button data-how="" class="on">All</button>
+      <button data-how="exact">Exact copies</button>
+      <button data-how="likely">Same song</button>
+      <button data-how="check">Check these</button>
+    </div>
+    <div id="dupe-groups"></div>
+    <div id="dupe-more" class="more"></div>
+  </main>
+
+  <!-- ============================== Playlists -->
+  <main class="panel" id="tab-playlists" hidden>
+    <div class="pl-layout">
+      <aside class="pl-side">
+        <form id="pl-new" class="pl-new" autocomplete="off">
+          <input id="pl-new-name" maxlength="60" placeholder="New playlist name">
+          <button class="primary" type="submit">Make</button>
+        </form>
+        <input class="search small" id="pl-find" type="search" placeholder="Find a playlist">
+        <div id="pl-list"></div>
+      </aside>
+      <section class="pl-detail" id="pl-detail">
+        <p class="empty">Choose a playlist on the left, or make a new one.</p>
+      </section>
+    </div>
+  </main>
+
+  <!-- ============================== Sort -->
+  <main class="panel" id="tab-sort" hidden>
+    <div class="intro-card">
+      <h2>Sort songs into decade folders</h2>
+      <p>Looks up when each song first came out, then moves it into its decade folder (1970s, 1980s…). The song picker's decade buttons follow straight away.</p>
+      <p class="note">Only songs with the singer or band in their name are looked up: a song name on its own too often matches the wrong song. Use the <b>No singer or band</b> filter on Songs to fix those, and they'll sort next time. iTunes only answers about 20 lookups a minute, so a big folder takes a while. It keeps going on the Jukebox even if you close this page. Nothing moves until you press Move.</p>
+    </div>
+    <div class="intro-card" id="sort-setup">
+      <h2>Which folders?</h2>
+      <div id="sort-folders" class="checks"></div>
+      <div class="actions"><button class="primary" id="sort-start">Start looking up</button></div>
+    </div>
+    <div class="intro-card" id="sort-progress" hidden>
+      <h2 id="sort-title"></h2>
+      <div class="meter"><div id="sort-meter"></div></div>
+      <p id="sort-line"></p>
+      <div id="sort-decades" class="decade-chips"></div>
+      <div class="actions">
+        <button class="primary" id="sort-apply" hidden></button>
+        <button class="secondary" id="sort-stop" hidden>Stop looking</button>
+        <button class="secondary" id="sort-again" hidden>Sort other folders</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ============================== History -->
+  <main class="panel" id="tab-history" hidden>
+    <p class="note">Every change from a laptop, newest first. Deleted songs can be put back for 30 days.</p>
+    <ol id="history-list" class="history"></ol>
+  </main>
+</div>
+
+<!-- Song editor -->
+<div class="drawer-back" id="drawer-back" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Edit song">
+  <button class="close" id="drawer-close" aria-label="Close">✕</button>
+  <video id="preview" controls preload="metadata" playsinline></video>
+  <p class="eyebrow" id="ed-file"></p>
+  <form id="ed-form" autocomplete="off">
+    <label class="field"><span>Singer or band</span><input id="ed-artist" maxlength="120" list="artist-list"></label>
+    <label class="field"><span>Song</span><input id="ed-title" maxlength="120" required></label>
+    <label class="field"><span>Folder</span><select id="ed-folder"></select></label>
+    <p class="note" id="ed-saveas"></p>
+    <div class="actions">
+      <button class="primary" type="submit" id="ed-save">Save</button>
+      <select id="ed-playlist" aria-label="Add to a playlist"><option value="">Add to playlist…</option></select>
+    </div>
+  </form>
+  <dl class="facts" id="ed-facts"></dl>
+  <div class="drawer-foot">
+    <button class="danger" id="ed-delete">Delete this song</button>
+    <p class="note">Deleted songs can be put back from History for 30 days.</p>
+  </div>
+</aside>
+<datalist id="artist-list"></datalist>
+
+<div class="toast" id="toast" role="status" hidden><span id="toast-text"></span><button class="link" id="toast-undo" hidden>Undo</button></div>
+
+<script src="/library/library.js"></script>
+</body>
+</html>

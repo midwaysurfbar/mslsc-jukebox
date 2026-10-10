@@ -326,3 +326,76 @@ test('A song arriving through the inbox ticks off its matching suggestion', asyn
   assert.deepEqual(ticked, ['wonderwall', 'The Chain'])
   assert.deepEqual(calls.filter((c) => c.action === 'set-status').map((c) => [c.id, c.status, c.venueKey]), [['s1', 'added', 'k'], ['s2', 'added', 'k']])
 })
+
+// ---- Library Manager laptops (Sam 2026-10-11) ----
+// A stand-in Library Manager that just records what it was asked.
+function fakeManager() {
+  const calls = []
+  const rec = (name) => async (...args) => { calls.push([name, ...args]); return { ok: true, did: name } }
+  return {
+    calls,
+    list: async () => [{ k: 'a'.repeat(32), t: 'Sunny' }],
+    folders: async () => ({ decades: ['1970s'], folders: [] }),
+    edit: rec('edit'),
+    move: rec('move'),
+    removeSongs: rec('removeSongs'),
+    undo: rec('undo'),
+    history: () => [],
+    playlists: () => [],
+    playlistAction: rec('playlistAction'),
+    duplicates: async () => ({ groups: [], copyFolders: [], totals: { groups: 0, extra: 0, exact: 0 } }),
+    resolveDuplicate: rec('resolveDuplicate'),
+    removeAllExact: rec('removeAllExact'),
+    ignoreDuplicate: () => ({ ok: true }),
+    makeFoldersNormal: rec('makeFoldersNormal'),
+    startSort: async () => ({ state: 'looking' }),
+    stopSort: () => ({ state: 'ready' }),
+    sortStatus: () => ({ state: 'idle' }),
+    applySort: rec('applySort'),
+  }
+}
+
+test('a laptop can only be set up over Tailscale', async (t) => {
+  const fake = start(t, { libraryManager: fakeManager() }) // tests connect from 127.0.0.1, not Tailscale
+  const st = await fake.handlers['requests:start-pairing'](null, 'library')
+  await new Promise((r) => setTimeout(r, 50))
+  const r = await call('/api/pair', { body: { code: st.pairing.code, kind: 'library', name: 'Sam\'s MacBook' } })
+  assert.equal(r.status, 403)
+  assert.match(r.data.error, /Tailscale/)
+})
+
+test('a laptop on Tailscale gets the Library; other screens never do', async (t) => {
+  const manager = fakeManager()
+  const fake = start(t, { libraryManager: manager, allowLocalLibrary: true })
+  const st = await fake.handlers['requests:start-pairing'](null, 'library')
+  await new Promise((r) => setTimeout(r, 50))
+  const paired = await call('/api/pair', { body: { code: st.pairing.code, kind: 'library', name: '  Sam\'s <b>MacBook</b>  ' } })
+  assert.equal(paired.status, 200)
+  assert.equal(paired.data.name, 'Sam\'s bMacBook/b')
+  const laptop = paired.data.token
+
+  const songs = await call('/api/lib/songs', { token: laptop })
+  assert.equal(songs.status, 200)
+  assert.equal(songs.data.songs[0].t, 'Sunny')
+  assert.equal(songs.data.you, 'Sam\'s bMacBook/b')
+  await call('/api/lib/edit', { token: laptop, body: { key: 'k', artist: 'Boney M.', title: 'Sunny' } })
+  assert.deepEqual(manager.calls[0], ['edit', { key: 'k', artist: 'Boney M.', title: 'Sunny' }, 'Sam\'s bMacBook/b'])
+
+  // a laptop isn't a remote, and a remote or picker isn't a laptop
+  assert.equal((await call('/api/remote/state', { token: laptop })).status, 403)
+  const remote = await pair(fake, 'remote')
+  const picker = await pair(fake, 'picker')
+  assert.equal((await call('/api/lib/songs', { token: remote })).status, 403)
+  assert.equal((await call('/api/lib/delete', { token: picker, body: { keys: ['x'] } })).status, 403)
+  assert.equal((await call('/api/lib/songs')).status, 401)
+  assert.equal(manager.calls.length, 1)
+})
+
+test('the song list version goes up when the library changes, for the picker and the Remote', async (t) => {
+  const fake = start(t)
+  const picker = await pair(fake, 'picker')
+  const v1 = (await call('/api/status', { token: picker })).data.libraryVersion
+  fake.api.invalidateLibrary()
+  const v2 = (await call('/api/status', { token: picker })).data.libraryVersion
+  assert.ok(v2 > v1)
+})

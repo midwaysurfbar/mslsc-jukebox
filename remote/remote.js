@@ -12,6 +12,7 @@ const $ = (id) => document.getElementById(id)
 let state = null        // last /api/remote/state
 let library = []        // [{k,t,a,d,th}]
 let libraryAt = 0
+let seenLibraryVersion = 0
 let failures = 0
 let busy = false
 
@@ -389,8 +390,9 @@ function renderScreens() {
   box.hidden = !r.pairing
   if (r.pairing) {
     const remote = r.pairing.kind === 'remote'
-    $('code-intro').textContent = remote ? 'On the new remote (another PC, phone or tablet), open this address:' : 'On the touch screen, open this address:'
-    $('code-address').textContent = r.address ? (remote ? `${r.address}/remote` : r.address) : ''
+    const laptop = r.pairing.kind === 'library'
+    $('code-intro').textContent = laptop ? 'On the laptop, with Tailscale on, open this address:' : remote ? 'On the new remote (another PC, phone or tablet), open this address:' : 'On the touch screen, open this address:'
+    $('code-address').textContent = laptop ? (r.tailnetAddress || '') : r.address ? (remote ? `${r.address}/remote` : r.address) : ''
     $('code').textContent = r.pairing.code
     const mins = Math.max(0, Math.ceil((r.pairing.expiresAt - Date.now()) / 60000))
     $('code-expiry').textContent = `This code works for ${mins} more minute${mins === 1 ? '' : 's'}.`
@@ -402,7 +404,7 @@ function renderScreens() {
     list.replaceChildren()
     if (!r.devices.length) list.append(el('li', { class: 'empty', text: 'No screens set up yet.' }))
     r.devices.forEach((d) => list.append(el('li', { class: 'row' },
-      el('span', { class: 'what' }, el('b', { text: d.id === state.you ? `${d.name} (this one)` : d.name }), el('span', { text: `${d.kind === 'remote' ? 'Staff remote' : 'Song picker'} · ${timeAgo(d.lastSeen)}` })),
+      el('span', { class: 'what' }, el('b', { text: d.id === state.you ? `${d.name} (this one)` : d.name }), el('span', { text: `${d.kind === 'remote' ? 'Staff remote' : d.kind === 'library' ? 'Library laptop' : 'Song picker'} · ${timeAgo(d.lastSeen)}` })),
       d.id === state.you ? null : el('span', { class: 'acts' }, el('button', { class: 'danger', text: 'Remove', 'data-d': d.id, 'data-n': d.name })))))
   }
   $('version').textContent = state.version ? `Jukebox ${state.version}` : ''
@@ -422,6 +424,12 @@ async function poll() {
     failures = 0
     state = data
     $('offline').hidden = true
+    // songs renamed / deleted on a Library laptop - fetch the list again
+    if (data.libraryVersion && data.libraryVersion !== seenLibraryVersion) {
+      if (seenLibraryVersion) libraryAt = 0
+      seenLibraryVersion = data.libraryVersion
+      if (tab === 'search' && !libraryAt) loadLibrary()
+    }
     $('conn').textContent = data.player ? 'Connected' : 'Jukebox starting…'
     $('conn').className = data.player ? 'pill ok' : 'pill'
     renderNow()
