@@ -33,11 +33,15 @@
   </header>
 
   <section class="now" aria-label="Now playing">
-    <div class="now-art" id="now-art"></div>
+    <div class="now-art" id="now-art"><video id="now-video" muted playsinline preload="auto" hidden></video></div>
     <div class="now-text">
       <p class="eyebrow" id="now-label">Now playing</p>
       <p class="now-title" id="now-title">Nothing playing</p>
       <p class="now-artist" id="now-artist"></p>
+    </div>
+    <div class="next-tile" id="next-tile" hidden>
+      <div class="now-art" id="next-art"><video id="next-video" muted playsinline loop preload="auto" hidden></video></div>
+      <p class="next-cap"><span>Up next</span><b id="next-title"></b></p>
     </div>
     <div class="progress">
       <span id="time-elapsed">0:00</span>

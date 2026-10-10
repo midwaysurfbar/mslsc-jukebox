@@ -69,7 +69,7 @@ const REMOTE_COMMANDS = new Set([
   'playlist-play', 'playlist-queue',
 ])
 
-module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, appVersion = '', tv = null, port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS }) {
+module.exports = function setupRequests({ ipcMain, getControlWindow, userData, thumbnailsDir, readJson, writeJson, listLibrary, videoPath = () => null, appVersion = '', tv = null, port = PORT, fetchImpl = globalThis.fetch, barCheckMs = BAR_CHECK_MS }) {
   const REQUESTS_PATH = path.join(userData, 'requests.json')
   const load = () => ({ enabled: false, serverOn: false, followBar: true, devices: [], ...readJson(REQUESTS_PATH, {}) })
   let config = load()
@@ -159,6 +159,29 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body))
   }
 
+  const VIDEO_TYPES = { '.mp4': 'video/mp4', '.m4v': 'video/mp4', '.mov': 'video/mp4', '.webm': 'video/webm', '.mkv': 'video/webm', '.ogv': 'video/ogg' }
+  function streamVideo(req, res, file) {
+    fs.stat(file, (err, st) => {
+      if (err || !st.isFile()) return send(res, 404, 'Not found', 'text/plain')
+      const type = VIDEO_TYPES[path.extname(file).toLowerCase()] || 'video/mp4'
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '')
+      let start = 0
+      let end = st.size - 1
+      if (m && (m[1] || m[2])) {
+        if (m[1]) { start = Number(m[1]); if (m[2]) end = Math.min(end, Number(m[2])) } else start = Math.max(0, st.size - Number(m[2]))
+        if (start > end) { res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }); return res.end() }
+      }
+      const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
+      if (m) headers['Content-Range'] = `bytes ${start}-${end}/${st.size}`
+      res.writeHead(m ? 206 : 200, headers)
+      if (req.method === 'HEAD') return res.end()
+      const stream = fs.createReadStream(file, { start, end })
+      stream.on('error', () => res.destroy())
+      res.on('close', () => stream.destroy())
+      stream.pipe(res)
+    })
+  }
+
   function readBody(req) {
     return new Promise((resolve) => {
       let data = ''
@@ -226,6 +249,12 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   async function handleRemote(req, res, url, device) {
     if (req.method === 'GET' && url.pathname === '/api/remote/state') {
       return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState(), tv: tv ? { visible: Boolean(tv.visible()) } : null })
+    }
+    // The Remote's little muted previews of what's playing and what's next.
+    if (req.method === 'GET' && url.pathname === '/api/remote/video') {
+      const file = videoPath(String(url.searchParams.get('k') || '').replace(/[^a-f0-9]/gi, ''))
+      if (!file) return send(res, 404, 'Not found', 'text/plain')
+      return streamVideo(req, res, file)
     }
     if (req.method === 'POST' && url.pathname === '/api/remote/command') {
       const { action, args } = await readBody(req)

@@ -401,6 +401,7 @@ function startRequests() {
       readJson: store.readJson,
       writeJson: store.writeJson,
       listLibrary: () => library.listRequestLibrary(),
+      videoPath: (key) => library.videoPathForKey(key),
       appVersion: app.getVersion(),
       // The Remote's Show on TV / Hide TV
       tv: {

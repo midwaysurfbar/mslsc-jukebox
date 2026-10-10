@@ -132,6 +132,7 @@ function renderNow() {
   const art = $('now-art')
   art.style.backgroundImage = now && now.th ? `url("/api/thumb?k=${encodeURIComponent(now.k)}&t=${encodeURIComponent(token)}")` : ''
   $('toggle').textContent = p && p.status === 'playing' ? '⏸' : '▶'
+  syncPreviews(p, now)
   const dur = (p && p.duration) || 0
   const pos = (p && p.elapsed) || 0
   $('time-elapsed').textContent = fmtTime(pos)
@@ -143,6 +144,55 @@ function renderNow() {
     $('volume-value').textContent = `${v}%`
   }
 }
+
+// Little muted videos (Sam 2026-10-10): what's playing, kept in step with
+// the Jukebox, and a loop of what's up next. Streamed from the venue PC only
+// while the Remote is actually on screen (switch.html says when it isn't).
+let shownBySwitch = true
+const remoteVisible = () => shownBySwitch && !document.hidden
+function videoUrl(key) { return `/api/remote/video?k=${encodeURIComponent(key)}&t=${encodeURIComponent(token)}` }
+function setVideo(v, key) {
+  if (v.dataset.k === (key || '')) return false
+  v.dataset.k = key || ''
+  v.hidden = true
+  if (key) { v.src = videoUrl(key); v.load() } else { v.removeAttribute('src'); v.load() }
+  return true
+}
+function syncPreviews(p, now) {
+  const nv = $('now-video')
+  const playing = Boolean(p && now && p.status === 'playing')
+  setVideo(nv, remoteVisible() && now ? now.k : '')
+  if (nv.dataset.k && nv.readyState >= 1) {
+    const want = Math.max(0, (p.elapsed || 0) + 0.3)
+    if (Math.abs(nv.currentTime - want) > 2) nv.currentTime = want
+    if (playing && nv.paused) nv.play().catch(() => {})
+    if (!playing && !nv.paused) nv.pause()
+  }
+  const next = p && p.upcoming && p.upcoming[0]
+  $('next-tile').hidden = !next
+  $('next-title').textContent = next ? (next.a ? `${next.t} – ${next.a}` : next.t) : ''
+  $('next-art').style.backgroundImage = next && next.th ? `url("/api/thumb?k=${encodeURIComponent(next.k)}&t=${encodeURIComponent(token)}")` : ''
+  const xv = $('next-video')
+  setVideo(xv, remoteVisible() && next ? next.k : '')
+}
+for (const id of ['now-video', 'next-video']) {
+  const v = $(id)
+  v.addEventListener('loadedmetadata', () => {
+    // the up-next loop starts a little way in, past any intro
+    if (id === 'next-video') { v.currentTime = Math.min(30, (v.duration || 0) / 3); v.play().catch(() => {}) }
+    if (state) syncPreviews(state.player, state.player && state.player.nowPlaying)
+  })
+  v.addEventListener('playing', () => { v.hidden = false })
+  v.addEventListener('error', () => { v.hidden = true })
+}
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'mslsc-visible') return
+  shownBySwitch = Boolean(e.data.visible)
+  if (state) syncPreviews(state.player, state.player && state.player.nowPlaying)
+})
+document.addEventListener('visibilitychange', () => {
+  if (state) syncPreviews(state.player, state.player && state.player.nowPlaying)
+})
 
 // ---------------------------------------------------------------- queue
 let lastQueueSig = ''
