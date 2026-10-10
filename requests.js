@@ -74,6 +74,8 @@ for (const f of ['shrikhand-400', 'barlow-500', 'barlow-600', 'barlow-700', 'bar
   PAGE_FILES[`/fonts/${f}.woff2`] = [`request/fonts/${f}.woff2`, 'font/woff2']
 }
 PAGE_FILES['/fonts/surf-fonts.css'] = ['request/fonts/surf-fonts.css', 'text/css; charset=utf-8']
+// the club theme (Theme Manager, 2026-10-11) - every page here follows it
+PAGE_FILES['/theme.js'] = ['shared/theme.js', 'text/javascript; charset=utf-8']
 const KINDS = new Set(['picker', 'remote', 'library'])
 const KIND_NAMES = { picker: 'Touch screen', remote: 'Remote', library: 'Laptop' }
 const BAR_FN = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/'

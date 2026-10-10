@@ -1,12 +1,12 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; background: #000; overflow: hidden; cursor: none; }
-.stage { position: relative; width: 100vw; height: 100vh; background: #000; }
+html, body { width: 100%; height: 100%; background: var(--t-bg-2,#000); overflow: hidden; cursor: none; }
+.stage { position: relative; width: 100vw; height: 100vh; background: var(--t-bg-2,#000); }
 .deck {
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
   object-fit: contain;
-  background: #000;
+  background: var(--t-bg-2,#000);
   opacity: 0;
   transition: opacity linear;
 }
@@ -16,7 +16,7 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; curs
   position: absolute;
   top: 0; left: 0;
   width: 100%; height: 100%;
-  background: #000;
+  background: var(--t-bg-2,#000);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.6s ease;
@@ -50,35 +50,40 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; curs
   justify-content: center;
   gap: 2.5vh;
   overflow: hidden;
-  background: #E9DFCB;
-  color: #2E312D;
+  background: var(--t-text,#E9DFCB);
+  color: var(--t-card,#2E312D);
   font-family: Barlow, system-ui, sans-serif;
   text-align: center;
 }
 .idle::before { /* faded sunburst */
   content: ""; position: absolute; left: 50%; top: 45%; width: 260vmax; height: 260vmax; transform: translate(-50%, -50%);
-  background: repeating-conic-gradient(from 0deg at 50% 50%, #ffffff59 0 6deg, transparent 6deg 12deg);
+  background: repeating-conic-gradient(from 0deg at 50% 50%, color-mix(in srgb,var(--t-text,#ffffff) 35%,transparent) 0 6deg, transparent 6deg 12deg);
 }
 .idle::after { /* the bar mat's stripes along the top */
   content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2.2vh;
-  background: linear-gradient(180deg, #2E312D 0 16%, #B04A3C 16% 44%, #F6F0E2 44% 72%, #5A7D62 72% 100%);
+  background: linear-gradient(180deg, var(--t-card,#2E312D) 0 16%, #B04A3C 16% 44%, var(--t-text,#F6F0E2) 44% 72%, var(--t-line,#5A7D62) 72% 100%);
 }
 .idle > * { position: relative; }
-.idle p { font-family: "Shrikhand", Georgia, serif; font-weight: 400; font-size: 11vh; line-height: 1.05; color: #B04A3C; text-shadow: 0.6vh 0.6vh 0 #2E312D; }
-.idle small { font-family: "Barlow Condensed", Barlow, sans-serif; font-weight: 800; font-size: 3.4vh; letter-spacing: .14em; text-transform: uppercase; color: #5A7D62; }
+.idle p { font-family: "Shrikhand", Georgia, serif; font-weight: 400; font-size: 11vh; line-height: 1.05; color: #B04A3C; text-shadow: 0.6vh 0.6vh 0 var(--t-card,#2E312D); }
+.idle small { font-family: "Barlow Condensed", Barlow, sans-serif; font-weight: 800; font-size: 3.4vh; letter-spacing: .14em; text-transform: uppercase; color: var(--t-line,#5A7D62); }
 .idle.hidden { display: none; }
 
 /* TV ad mode: videos hidden (still playing - the music carries on), ads loop */
 .tv-brand { display: none; z-index: 4; }
 body.tv-ads .deck { visibility: hidden; }
 body.tv-ads #idle { display: none; }
-body.tv-ads .ad-overlay { background: #2E312D; }
+body.tv-ads .ad-overlay { background: var(--t-card,#2E312D); }
 body.tv-ads.tv-ads-empty .tv-brand { display: flex; }
 
 /* ==== Full 80s neon (Sam, 2026-10-11: "option b") ==== */
-.idle { background: #120A2A; color: #F3E9FF; }
-.idle::before { background: repeating-conic-gradient(from 0deg at 50% 50%, #FF2E9722 0 6deg, transparent 6deg 12deg); }
-.idle::after { background: linear-gradient(180deg, #FFD23F 0%, #FF7A3C 30%, #FF2E97 60%, #5B1C8F 100%); }
-.idle p { color: #FF2E97; text-shadow: 0 0 1vh #FF2E97, 0 0 3vh #FF2E9799, 0 0 6vh #FF2E9755; }
-.idle small { color: #19E3FF; text-shadow: 0 0 1.4vh #19E3FF88; }
-body.tv-ads .ad-overlay { background: #120A2A; }
+.idle { background: var(--t-bg,#120A2A); color: var(--t-text,#F3E9FF); }
+.idle::before { background: repeating-conic-gradient(from 0deg at 50% 50%, color-mix(in srgb,var(--t-accent-2,#FF2E97) 13%,transparent) 0 6deg, transparent 6deg 12deg); }
+.idle::after { background: linear-gradient(180deg, var(--t-highlight,#FFD23F) 0%, var(--t-highlight,#FF7A3C) 30%, var(--t-accent-2,#FF2E97) 60%, var(--t-line,#5B1C8F) 100%); }
+.idle p { color: var(--t-accent-2,#FF2E97); text-shadow: 0 0 1vh var(--t-accent-2,#FF2E97), 0 0 3vh color-mix(in srgb,var(--t-accent-2,#FF2E97) 60%,transparent), 0 0 6vh color-mix(in srgb,var(--t-accent-2,#FF2E97) 33%,transparent); }
+.idle small { color: var(--t-accent,#19E3FF); text-shadow: 0 0 1.4vh color-mix(in srgb,var(--t-accent,#19E3FF) 53%,transparent); }
+body.tv-ads .ad-overlay { background: var(--t-bg,#120A2A); }
+
+/* THEMEVARS-DONE: colours follow the club theme (theme.js); the neon values are the fallbacks */
+html[data-theme-glow=off] .idle p{text-shadow:none}
+html[data-theme-sunburst=off] .idle::before{display:none}
+.idle p{font-family:var(--t-font-display,"Shrikhand",Georgia,serif)}

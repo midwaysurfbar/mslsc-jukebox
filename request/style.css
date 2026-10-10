@@ -6,10 +6,10 @@
    Built for a touch screen: big targets, nothing hover-only, nothing to
    pinch or select. Fonts are served locally (fonts/surf-fonts.css). */
 :root{
-  --sand:#E9DFCB; --sand-2:#D6C6A6; --paper:#F6F0E2;
-  --charcoal:#2E312D; --green:#5A7D62; --red:#B04A3C; --red-2:#7E3329;
-  --red-soft:#E8A79B; --green-soft:#B9C9B7;
-  --ink:#2E312D; --muted:#716B5E;
+  --sand:var(--t-text,#E9DFCB); --sand-2:var(--t-muted,#D6C6A6); --paper:var(--t-text,#F6F0E2);
+  --charcoal:var(--t-card,#2E312D); --green:var(--t-line,#5A7D62); --red:#B04A3C; --red-2:var(--t-line,#7E3329);
+  --red-soft:var(--t-muted,#E8A79B); --green-soft:var(--t-muted,#B9C9B7);
+  --ink:var(--t-card,#2E312D); --muted:var(--t-line,#716B5E);
   --display:"Shrikhand",Georgia,serif;
   --label:"Barlow Condensed","Barlow",system-ui,sans-serif;
 }
@@ -30,7 +30,7 @@ button:focus-visible{outline:3px solid var(--green);outline-offset:3px}
   font-family:var(--label);font-weight:800;letter-spacing:.06em;
 }
 .chips button:active,.letters button:active,.kb-row button:active,.keypad button:active,.kb-done:active{transform:translateY(2px);box-shadow:0 1px 0 var(--sand-2)}
-.chips button.on,.letters button.on{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 3px 0 var(--red-2)}
+.chips button.on,.letters button.on{background:var(--red);border-color:var(--red);color:var(--t-text,#fff);box-shadow:0 3px 0 var(--red-2)}
 
 /* ---- set up ---- */
 #pair{display:grid;place-items:center;padding:24px}
@@ -51,7 +51,7 @@ button:focus-visible{outline:3px solid var(--green);outline-offset:3px}
 }
 .top::before{ /* the sunburst */
   content:"";position:absolute;inset:-120% -20%;pointer-events:none;
-  background:repeating-conic-gradient(from 0deg at 50% 50%,#ffffff17 0 6deg,transparent 6deg 12deg);
+  background:repeating-conic-gradient(from 0deg at 50% 50%,color-mix(in srgb,var(--t-text,#ffffff) 9%,transparent) 0 6deg,transparent 6deg 12deg);
   animation:sun 120s linear infinite;
 }
 .top::after{content:"";position:absolute;left:0;right:0;bottom:0;height:12px}
@@ -67,13 +67,13 @@ button:focus-visible{outline:3px solid var(--green);outline-offset:3px}
 .next{display:grid;gap:2px;color:var(--green-soft);font-size:16px;font-weight:600;min-width:0;text-align:right}
 .next b{font-family:var(--label);color:var(--red-soft);font-weight:800;text-transform:uppercase;letter-spacing:.16em;font-size:13px}
 .next span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pill{font-family:var(--label);border-radius:999px;padding:9px 18px;font-weight:800;font-size:16px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;color:#fff;background:var(--green);box-shadow:0 3px 0 #3c5642}
+.pill{font-family:var(--label);border-radius:999px;padding:9px 18px;font-weight:800;font-size:16px;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;color:var(--t-text,#fff);background:var(--green);box-shadow:0 3px 0 var(--t-line,#3c5642)}
 .pill.full{color:var(--charcoal);background:var(--paper);box-shadow:0 3px 0 var(--sand-2)}
 .banner{margin:18px 24px 0;background:var(--paper);color:var(--ink);text-align:center;font-weight:700;font-size:20px;padding:14px 20px;border-radius:14px;border-left:12px solid var(--red);box-shadow:0 3px 0 var(--sand-2)}
 
 /* ---- search + filters ---- */
 .tools{display:flex;gap:14px;align-items:center;padding:24px 24px 8px;flex-wrap:wrap}
-.search{flex:1;min-width:280px;text-align:left;background:#fffaf0;color:var(--muted);border-radius:999px;padding:16px 24px;font-size:21px;font-weight:600;
+.search{flex:1;min-width:280px;text-align:left;background:var(--t-text,#fffaf0);color:var(--muted);border-radius:999px;padding:16px 24px;font-size:21px;font-weight:600;
   border:4px solid var(--green);box-shadow:0 3px 0 var(--sand-2)}
 .search.has-text{color:var(--ink)}
 .chips{display:flex;gap:10px;flex-wrap:wrap}
@@ -98,10 +98,10 @@ body.kb-open .to-top{display:none}
 .song .info{position:relative;display:grid;gap:5px;min-width:0;padding:2px 0}
 .song .title{font-weight:700;font-size:20px;line-height:1.15;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .song .artist{font-family:var(--label);font-weight:800;font-size:15px;text-transform:uppercase;letter-spacing:.1em;color:var(--green);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.song .add{position:relative;width:76px;height:76px;border-radius:50%;font-family:var(--label);font-size:14px;font-weight:800;line-height:1.05;color:#fff;text-transform:uppercase;letter-spacing:.06em;
+.song .add{position:relative;width:76px;height:76px;border-radius:50%;font-family:var(--label);font-size:14px;font-weight:800;line-height:1.05;color:var(--t-text,#fff);text-transform:uppercase;letter-spacing:.06em;
   background:var(--red);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 5px 0 6px var(--red-2)}
 .song .add:active{transform:translateY(3px);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 2px 0 6px var(--red-2)}
-.song .add:disabled{background:#a59d8e;box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 5px 0 6px #7d7669;color:#f3eee3}
+.song .add:disabled{background:var(--t-muted,#a59d8e);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 5px 0 6px var(--t-line,#7d7669);color:var(--t-text,#f3eee3)}
 .empty{text-align:center;color:var(--muted);font-size:22px;font-weight:600;padding:30px 40px 40px}
 .empty p{margin:0 0 18px}
 
@@ -110,18 +110,18 @@ body.kb-open .to-top{display:none}
   background:var(--charcoal);color:var(--paper);box-shadow:0 3px 0 var(--red)}
 .suggest-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--red)}
 .suggest-btn.big{font-size:21px;padding:16px 28px}
-.suggest{position:fixed;inset:0;z-index:19;background:#2E312D99;display:flex;justify-content:center;align-items:flex-start;padding:28px 18px}
+.suggest{position:fixed;inset:0;z-index:19;background:color-mix(in srgb,var(--t-card,#2E312D) 60%,transparent);display:flex;justify-content:center;align-items:flex-start;padding:28px 18px}
 .suggest-card{width:min(640px,100%);background:var(--paper);border-radius:26px;padding:24px 26px 26px;box-shadow:0 8px 0 var(--sand-2),0 24px 50px #0006;border-top:14px solid var(--red);display:grid;gap:14px}
 .suggest-card h2{margin:0;font-family:var(--display);font-weight:400;font-size:36px;color:var(--red);text-shadow:3px 3px 0 var(--charcoal)}
 .suggest-card p{margin:0;font-size:19px;font-weight:600;color:var(--muted)}
-.suggest .field{display:grid;gap:4px;text-align:left;background:#fffaf0;border:4px solid var(--sand-2);border-radius:18px;padding:12px 18px;min-height:78px}
+.suggest .field{display:grid;gap:4px;text-align:left;background:var(--t-text,#fffaf0);border:4px solid var(--sand-2);border-radius:18px;padding:12px 18px;min-height:78px}
 .suggest .field.on{border-color:var(--green)}
 .suggest .field span{font-family:var(--label);font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:14px;color:var(--green)}
 .suggest .field b{font-size:24px;font-weight:700;min-height:1.2em;color:var(--ink)}
 .sg-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:4px}
 .sg-actions button{font-family:var(--label);font-weight:800;font-size:20px;letter-spacing:.06em;text-transform:uppercase;padding:14px 24px;border-radius:16px}
 .sg-cancel{background:var(--sand);color:var(--charcoal);box-shadow:0 3px 0 var(--sand-2)}
-.sg-send{background:var(--red);color:#fff;box-shadow:0 4px 0 var(--red-2)}
+.sg-send{background:var(--red);color:var(--t-text,#fff);box-shadow:0 4px 0 var(--red-2)}
 #more{height:40px}
 /* room to scroll the matches above the on-screen keyboard */
 body.kb-open #main{padding-bottom:460px}
@@ -131,7 +131,7 @@ body.kb-open #main{padding-bottom:460px}
 .keyboard::before{content:"";position:absolute;left:0;right:0;top:0;height:12px}
 .kb-bar{display:flex;align-items:center;gap:12px;padding:0 4px 12px}
 #kb-preview{flex:1;font-size:24px;font-weight:700;min-height:1.3em;color:var(--paper)}
-.kb-done{padding:12px 26px;font-size:19px;text-transform:uppercase;background:var(--green);border-color:var(--green);color:#fff;box-shadow:0 3px 0 #3c5642}
+.kb-done{padding:12px 26px;font-size:19px;text-transform:uppercase;background:var(--green);border-color:var(--green);color:var(--t-text,#fff);box-shadow:0 3px 0 var(--t-line,#3c5642)}
 #kb-keys{display:grid;gap:10px}
 .kb-row{display:flex;gap:8px;justify-content:center}
 .kb-row button{flex:1;max-width:84px;padding:16px 0;font-size:23px;border-color:transparent;box-shadow:0 3px 0 #0006}
@@ -148,7 +148,7 @@ body.kb-open #main{padding-bottom:460px}
 /* ---- closed / idle ---- */
 .overlay{position:fixed;inset:0;z-index:40;display:grid;place-items:center;text-align:center;padding:30px;overflow:hidden;background:var(--sand)}
 .overlay::before{content:"";position:absolute;inset:-60% -40% 10% -40%;pointer-events:none;
-  background:repeating-conic-gradient(from 0deg at 50% 50%,#ffffff55 0 6deg,transparent 6deg 12deg)}
+  background:repeating-conic-gradient(from 0deg at 50% 50%,color-mix(in srgb,var(--t-text,#ffffff) 33%,transparent) 0 6deg,transparent 6deg 12deg)}
 .overlay::after{content:"";position:absolute;left:0;right:0;top:0;height:16px;background:linear-gradient(180deg,var(--charcoal) 0 16%,var(--red) 16% 44%,var(--paper) 44% 72%,var(--green) 72% 100%)}
 .overlay > div{position:relative}
 .overlay h1{font-family:var(--display);font-weight:400;font-size:clamp(52px,8vw,110px);margin:0;color:var(--red);line-height:1.02;text-shadow:5px 5px 0 var(--charcoal);text-wrap:balance}
@@ -195,27 +195,35 @@ body.kb-open #main{padding-bottom:460px}
    Neon pink / aqua / yellow on deep purple, glowing lettering, a sunset
    stripe. Overrides the surf tokens above, so the layout is unchanged. */
 :root{
-  --sand:#120A2A; --sand-2:#3B2775; --paper:#1D1240;
-  --charcoal:#0B0620; --green:#19E3FF; --red:#FF2E97; --red-2:#A3165E;
-  --red-soft:#FFD23F; --green-soft:#9FF3FF;
-  --ink:#F3E9FF; --muted:#B9A8E0;
+  --sand:var(--t-bg,#120A2A); --sand-2:var(--t-line,#3B2775); --paper:var(--t-card,#1D1240);
+  --charcoal:var(--t-header-bg,#0B0620); --green:var(--t-accent,#19E3FF); --red:var(--t-accent-2,#FF2E97); --red-2:var(--t-line,#A3165E);
+  --red-soft:var(--t-highlight,#FFD23F); --green-soft:var(--t-text,#9FF3FF);
+  --ink:var(--t-text,#F3E9FF); --muted:var(--t-muted,#B9A8E0);
 }
-.stripes,.top::after,.keyboard::before,.overlay::after{background:linear-gradient(180deg,#FFD23F 0%,#FF7A3C 30%,#FF2E97 60%,#5B1C8F 100%)}
+.stripes,.top::after,.keyboard::before,.overlay::after{background:var(--t-stripe,linear-gradient(180deg,#FFD23F 0%,#FF7A3C 30%,#FF2E97 60%,#5B1C8F 100%))}
 .chips button,.letters button,.kb-row button,.keypad button,.kb-done,.pill.full,.sg-cancel,.code,.now strong{color:var(--ink)}
-.chips button.on,.letters button.on{background:var(--green);border-color:var(--green);color:#120A2A;box-shadow:0 0 14px #19E3FFAA}
-.brand,.pair-card h1,.suggest-card h2,.overlay h1{color:var(--red);text-shadow:0 0 6px #FF2E97,0 0 22px #FF2E9799,0 0 44px #FF2E9755}
-.now{box-shadow:0 0 18px #19E3FF66}
+.chips button.on,.letters button.on{background:var(--green);border-color:var(--green);color:var(--t-bg,#120A2A);box-shadow:0 0 14px color-mix(in srgb,var(--t-accent,#19E3FF) 67%,transparent)}
+.brand,.pair-card h1,.suggest-card h2,.overlay h1{color:var(--red);text-shadow:0 0 6px var(--t-accent-2,#FF2E97),0 0 22px color-mix(in srgb,var(--t-accent-2,#FF2E97) 60%,transparent),0 0 44px color-mix(in srgb,var(--t-accent-2,#FF2E97) 33%,transparent)}
+.now{box-shadow:0 0 18px color-mix(in srgb,var(--t-accent,#19E3FF) 40%,transparent)}
 .now .label{color:var(--red-soft)}
-.song{box-shadow:0 0 0 1.5px #3B2775,0 4px 0 #3B2775}
+.song{box-shadow:0 0 0 1.5px var(--t-line,#3B2775),0 4px 0 var(--t-line,#3B2775)}
 .song:nth-child(3n+3){border-left-color:var(--red-soft)}
-.song .add{box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--red),0 0 18px 6px #FF2E9766}
+.song .add{box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--red),0 0 18px 6px color-mix(in srgb,var(--t-accent-2,#FF2E97) 40%,transparent)}
 .song .add:active{box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--red)}
-.song .add:disabled{background:#4A3B73;color:#B9A8E0;box-shadow:0 0 0 4px var(--paper),0 0 0 6px #4A3B73}
-.search,.suggest .field{background:#0B0620}
-.pill{color:#120A2A;box-shadow:0 0 12px #19E3FF88}
-.to-top,.suggest-btn{box-shadow:0 0 0 2px var(--red),0 0 16px #FF2E9788}
-.suggest{background:#0B0620CC}
-.overlay::before{background:repeating-conic-gradient(from 0deg at 50% 50%,#FF2E9722 0 6deg,transparent 6deg 12deg)}
-.next-opening{box-shadow:0 0 0 2px var(--green),0 0 20px #19E3FF66}
-.kb-done{color:#120A2A}
-.top,.next-opening,#kb-preview,.to-top,.suggest-btn{color:var(--ink)}
+.song .add:disabled{background:var(--t-line,#4A3B73);color:var(--t-muted,#B9A8E0);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--t-line,#4A3B73)}
+.search,.suggest .field{background:var(--t-input-bg,#0B0620)}
+.pill{color:var(--t-bg,#120A2A);box-shadow:0 0 12px color-mix(in srgb,var(--t-accent,#19E3FF) 53%,transparent)}
+.to-top,.suggest-btn{box-shadow:0 0 0 2px var(--red),0 0 16px color-mix(in srgb,var(--t-accent-2,#FF2E97) 53%,transparent)}
+.suggest{background:color-mix(in srgb,var(--t-bg-2,#0B0620) 80%,transparent)}
+.overlay::before{background:repeating-conic-gradient(from 0deg at 50% 50%,color-mix(in srgb,var(--t-accent-2,#FF2E97) 13%,transparent) 0 6deg,transparent 6deg 12deg)}
+.next-opening{box-shadow:0 0 0 2px var(--green),0 0 20px color-mix(in srgb,var(--t-accent,#19E3FF) 40%,transparent)}
+.kb-done{color:var(--t-bg,#120A2A)}
+.top,.next-opening,#kb-preview,.to-top,.suggest-btn{color:var(--t-header-text,var(--ink))}
+
+/* THEMEVARS-DONE: colours follow the club theme (theme.js); the neon values are the fallbacks */
+html[data-theme-glow=off] .brand,html[data-theme-glow=off] .pair-card h1,html[data-theme-glow=off] .suggest-card h2,html[data-theme-glow=off] .overlay h1{text-shadow:none}
+html[data-theme-sunburst=off] .top::before,html[data-theme-sunburst=off] .overlay::before{display:none}
+:root{--display:var(--t-font-display,"Shrikhand",Georgia,serif);--label:var(--t-font-label,"Barlow Condensed","Barlow",system-ui,sans-serif)}
+/* the title sits on the header bar, so it takes the header's text colour (the title colour glows behind it) */
+.brand{color:var(--t-header-text,#F3E9FF)}
+html:not([data-theme-glow=on]) .brand{text-shadow:3px 3px 0 var(--t-accent-2,#FF2E97)}
