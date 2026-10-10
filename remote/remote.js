@@ -129,6 +129,7 @@ function renderSuggestions() {
     list.append(el('li', { class: 'row' },
       el('span', { class: 'what' }, el('b', { text: s.song }), el('span', { text: [s.artist, `asked ${s.times} time${s.times === 1 ? '' : 's'}`, `last ${when(s.last_at)}`].filter(Boolean).join(' · ') })),
       el('span', { class: 'acts' },
+        el('a', { class: 'find-yt', text: 'Find on YouTube', href: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${s.artist ? `${s.artist} ` : ''}${s.song} official music video`)}`, target: '_blank', rel: 'noopener noreferrer' }),
         el('button', { class: 'primary', text: 'Added', 'data-sg': s.id, 'data-st': 'added' }),
         el('button', { class: 'secondary', text: 'Dismiss', 'data-sg': s.id, 'data-st': 'dismissed' }))))
   }

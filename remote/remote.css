@@ -168,3 +168,4 @@ button,input,select,textarea{font-family:inherit}
 .rows .empty{color:var(--muted);padding:10px}
 
 .tv-blank{background:transparent;color:var(--surf-muted,#716B5E);padding:10px 12px;font-weight:700;text-decoration:underline;min-height:44px}
+.find-yt{display:inline-flex;align-items:center;padding:8px 12px;border-radius:9px;background:var(--surf-red,#B04A3C);color:#fff;font-weight:700;text-decoration:none;white-space:nowrap}
