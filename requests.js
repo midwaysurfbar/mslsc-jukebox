@@ -129,6 +129,34 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     }
     writeJson(SUGGEST_PENDING, left)
   }
+  // A song that's just arrived through the New Suggestions inbox ticks off
+  // the matching waiting suggestion(s) by itself (Sam, 2026-10-10). Match =
+  // same song name (or one contains the other) and, if the suggestion gave
+  // an artist, the same artist the same way. Never throws.
+  const normWords = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim()
+  const near = (a, b) => a && b && (a === b || (Math.min(a.length, b.length) >= 4 && (a.includes(b) || b.includes(a))))
+  function suggestionMatches(s, song) {
+    if (!near(normWords(s.song), normWords(song.title))) return false
+    const wantArtist = normWords(s.artist)
+    return !wantArtist || near(wantArtist, normWords(song.artist))
+  }
+  async function tickSuggestions(songs) {
+    const venueKey = (readJson(SUGGEST_KEY_PATH, {}) || {}).venueKey
+    if (!venueKey || !songs || !songs.length) return []
+    try {
+      const list = await callSuggest({ action: 'list' })
+      const ticked = []
+      for (const s of (list && list.waiting) || []) {
+        if (!songs.some((song) => suggestionMatches(s, song))) continue
+        const r = await callSuggest({ action: 'set-status', id: s.id, status: 'added', venueKey })
+        if (r && r.ok) ticked.push(s.song)
+      }
+      return ticked
+    } catch {
+      return []
+    }
+  }
+
   const suggestTimer = setInterval(() => { flushSuggestions().catch(() => {}) }, 60 * 1000)
   if (suggestTimer.unref) suggestTimer.unref()
 
@@ -520,6 +548,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
 
   return {
     invalidateLibrary: () => { library = null },
+    tickSuggestions,
     // tests only
     checkBar,
     close: () => new Promise((resolve) => {

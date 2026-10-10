@@ -50,6 +50,7 @@ function start(t, extra = {}) {
   })
   t.after(() => api.close())
   fake.api = api
+  fake.userData = userData
   return fake
 }
 
@@ -297,4 +298,31 @@ test('TV modes: off = ads, plus a true blank screen', async (t) => {
   assert.equal(mode, 'blank')
   await cmd('tv-show')
   assert.equal((await call('/api/remote/state', { token: remote })).data.tv.mode, 'videos')
+})
+
+test('A song arriving through the inbox ticks off its matching suggestion', async (t) => {
+  const calls = []
+  const waiting = [
+    { id: 's1', song: 'wonderwall', artist: 'oasis' },
+    { id: 's2', song: 'The Chain', artist: '' },
+    { id: 's3', song: 'Dreams', artist: 'The Cranberries' },
+  ]
+  const fetchImpl = async (_url, opts) => {
+    const body = JSON.parse(opts.body)
+    calls.push(body)
+    if (body.action === 'list') return { json: async () => ({ ok: true, waiting, handled: [] }) }
+    return { json: async () => ({ ok: true }) }
+  }
+  const fake = start(t, { fetchImpl })
+  // no venue key on this PC -> nothing happens
+  assert.deepEqual(await fake.api.tickSuggestions([{ title: 'Wonderwall', artist: 'Oasis' }]), [])
+  assert.equal(calls.length, 0)
+  require('node:fs').writeFileSync(require('node:path').join(fake.userData, 'suggestions.json'), JSON.stringify({ venueKey: 'k' }))
+  const ticked = await fake.api.tickSuggestions([
+    { title: 'Wonderwall', artist: 'Oasis' },
+    { title: 'The Chain', artist: 'Fleetwood Mac' },
+    { title: 'Dreams', artist: 'Fleetwood Mac' }, // different artist from s3 - not ticked
+  ])
+  assert.deepEqual(ticked, ['wonderwall', 'The Chain'])
+  assert.deepEqual(calls.filter((c) => c.action === 'set-status').map((c) => [c.id, c.status, c.venueKey]), [['s1', 'added', 'k'], ['s2', 'added', 'k']])
 })

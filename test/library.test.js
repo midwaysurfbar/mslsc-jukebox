@@ -204,8 +204,9 @@ test('New Suggestions inbox: sorted into its decade once fully arrived, unknowns
   const lookups = { 'Oasis - Wonderwall.mp4': { decade: '1990s', confidence: 'high' }, 'Mystery Band - Unknown.mp4': { decade: 'Unknown', confidence: 'none' } }
   let clock = 1000
   let movedCalls = 0
+  let movedSongs = []
   const sorter = createInboxSorter({
-    store, library, now: () => clock, onMoved: () => { movedCalls += 1 },
+    store, library, now: () => clock, onMoved: (_n, songs) => { movedCalls += 1; movedSongs = songs },
     metadata: { lookup: async (_key, name) => lookups[name] || { decade: 'Unknown', confidence: 'none' } },
   })
   const inbox = path.join(media, 'New Suggestions')
@@ -215,6 +216,7 @@ test('New Suggestions inbox: sorted into its decade once fully arrived, unknowns
   clock += 20000
   assert.equal(await sorter.run(), 2)
   assert.equal(movedCalls, 1)
+  assert.deepEqual(movedSongs.map((x) => x.title).sort(), ['Unknown', 'Wonderwall'])
   assert.ok(fs.existsSync(path.join(media, '1990s', 'Oasis - Wonderwall.mp4')))
   assert.ok(fs.existsSync(path.join(media, 'Mystery Band - Unknown.mp4')))
   assert.ok(fs.existsSync(path.join(inbox, 'Still Coming - Song.mp4'))) // Syncthing still copying it

@@ -63,8 +63,11 @@ const inboxSorter = createInboxSorter({
   store,
   library,
   metadata,
-  onMoved: () => {
-    if (requests) requests.invalidateLibrary()
+  onMoved: (_count, songs) => {
+    if (requests) {
+      requests.invalidateLibrary()
+      requests.tickSuggestions(songs).catch(() => {})
+    }
     sendToControl('media-folder:changed')
   },
 })
