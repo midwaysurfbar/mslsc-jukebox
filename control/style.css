@@ -1,33 +1,33 @@
 *{box-sizing:border-box}
-body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:#f4f7f6;color:#20313a;padding-bottom:84px}
+body{margin:0;font-family:Barlow,system-ui,-apple-system,"Segoe UI",sans-serif;background:#E9DFCB;color:#2E312D;padding-bottom:84px}
 button,input,select{font:inherit}
-.topbar{background:#173F4F;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:24px;box-shadow:0 2px 12px #0002}
+.topbar{background:#2E312D;color:#fff;padding:14px 22px;display:flex;align-items:center;gap:24px;box-shadow:0 2px 12px #0002}
 .topbar strong{font-size:1.3rem}
 .topbar nav{display:flex;gap:8px}
 .tab-btn{background:transparent;color:#fff;border:1px solid #ffffff42;border-radius:8px;padding:8px 14px;cursor:pointer}
-.tab-btn.active{background:#2b7182}
+.tab-btn.active{background:#5A7D62}
 .shell{max-width:1200px;margin:auto;padding:24px}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
 .panel-title{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
 .panel-title h1{margin:0 0 4px;font-size:1.4rem}
-.eyebrow{margin:0;color:#5d7078;font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+.eyebrow{margin:0;color:#716B5E;font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
 .button-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-input,select{padding:9px 12px;border:1px solid #b7c9cd;border-radius:8px;background:#fff;color:#20313a}
+input,select{padding:9px 12px;border:1px solid #D6C6A6;border-radius:8px;background:#F6F0E2;color:#2E312D}
 .search-input{min-width:220px}
 button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}
-.primary{background:#2b7182;color:#fff}
-.secondary{background:#e6eff0;color:#234c59}
-.danger{background:#b33a3a;color:#fff}
+.primary{background:#5A7D62;color:#fff}
+.secondary{background:#E3D7BF;color:#2E312D}
+.danger{background:#B04A3C;color:#fff}
 .message{color:#8a5a00;margin-bottom:10px}
 .message:empty{display:none}
 .library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px}
-.library-group{grid-column:1/-1;font-weight:800;color:#173b50;margin:12px 0 -6px;font-size:1.05rem}
-.track-tile{background:#fff;border:1px solid #d8e2e3;border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
-.track-thumb{width:100%;aspect-ratio:16/9;background:#0f2836 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#7a97a1;font-size:.75rem}
+.library-group{grid-column:1/-1;font-weight:800;color:#2E312D;margin:12px 0 -6px;font-size:1.05rem}
+.track-tile{background:#F6F0E2;border:1px solid #D6C6A6;border-radius:12px;overflow:hidden;cursor:pointer;display:flex;flex-direction:column}
+.track-thumb{width:100%;aspect-ratio:16/9;background:#232521 center/cover no-repeat;display:flex;align-items:center;justify-content:center;color:#7a97a1;font-size:.75rem}
 .track-info{padding:10px}
 .track-info strong{display:block;font-size:.85rem;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.track-meta{color:#687b82;font-size:.75rem}
+.track-meta{color:#716B5E;font-size:.75rem}
 .track-actions{display:flex;gap:6px;padding:0 10px 10px}
 .track-actions button{flex:1;padding:6px;font-size:.78rem}
 /* The playlist picker moved onto its own row (see renderTrackTile) so a
@@ -36,44 +36,44 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
    this flex item actually shrink to the tile instead of overflowing it. */
 .track-actions select{flex:1;min-width:0;padding:6px;font-size:.78rem}
 .playlists-list,.queue-list{display:grid;gap:12px;list-style:none;padding:0;margin:0}
-.playlist-card,.queue-row{background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:14px}
+.playlist-card,.queue-row{background:#F6F0E2;border:1px solid #D6C6A6;border-radius:12px;padding:14px}
 .playlist-header{display:flex;justify-content:space-between;align-items:center}
-.auto-tag{font-weight:400;font-size:.72rem;color:#5d7078;margin-left:6px}
+.auto-tag{font-weight:400;font-size:.72rem;color:#716B5E;margin-left:6px}
 .playlist-tracks{margin-top:10px;display:grid;gap:6px}
 .playlist-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
-.playlist-tile{background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:8px}
-.playlist-tile:hover{border-color:#2b7182}
+.playlist-tile{background:#F6F0E2;border:1px solid #D6C6A6;border-radius:12px;padding:14px;cursor:pointer;display:flex;flex-direction:column;gap:8px}
+.playlist-tile:hover{border-color:#5A7D62}
 .playlist-tile .track-actions{padding:0}
 .playlist-tile strong{font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .playlist-detail{display:grid;gap:14px;align-content:start}
 .playlist-detail>#playlist-back-btn{justify-self:start}
 .playlist-track-row,.queue-row{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.queue-row.now-playing{border-color:#2b7182;background:#eef8f9}
-.queue-index{color:#687b82;font-weight:800;width:24px}
+.queue-row.now-playing{border-color:#5A7D62;background:#EFE6D2}
+.queue-index{color:#716B5E;font-weight:800;width:24px}
 /* Cards fill whatever width the window actually has, wrapping to more
    columns on a wider window rather than one narrow column capped well
    short of the screen regardless of how much room there is. Update sits
    first in the markup (top-left, reading order) since it's the one
    thing worth checking on sight, not hunting for at the bottom. */
 .settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;align-items:start}
-.settings-card{background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:20px;display:grid;gap:16px;align-content:start}
-.settings-card h2{margin:0;font-size:1.05rem;color:#173F4F}
+.settings-card{background:#F6F0E2;border:1px solid #D6C6A6;border-radius:12px;padding:20px;display:grid;gap:16px;align-content:start}
+.settings-card h2{margin:0;font-size:1.05rem;color:#2E312D}
 .settings-card label{display:grid;gap:8px;font-weight:700}
-.settings-card input[readonly]{flex:1;background:#f4f7f6}
+.settings-card input[readonly]{flex:1;background:#E9DFCB}
 .settings-card.danger-zone{border-color:#e6b8b8}
 .web-ads-list{display:grid;gap:6px;max-height:220px;overflow-y:auto}
-.web-ads-list .web-ad-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #e2e8ea;border-radius:8px;background:#f9fbfb}
-.web-ads-list .web-ad-row img{width:36px;height:24px;object-fit:cover;border-radius:4px;flex:0 0 auto;background:#e2e8ea}
+.web-ads-list .web-ad-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #E3D7BF;border-radius:8px;background:#f9fbfb}
+.web-ads-list .web-ad-row img{width:36px;height:24px;object-fit:cover;border-radius:4px;flex:0 0 auto;background:#E3D7BF}
 .web-ads-list .web-ad-row span{flex:1;font-size:0.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .web-ads-list .web-ad-row button{flex:0 0 auto;padding:5px 10px;font-size:0.76rem}
 .toggle-row{display:flex!important;flex-direction:row;align-items:center;justify-content:space-between;gap:12px}
 .toggle-switch{display:inline-block;position:relative;width:46px;height:26px;flex:0 0 auto}
 .toggle-switch input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer;z-index:1}
 .toggle-track{position:absolute;inset:0;background:#c7d4d6;border-radius:999px;transition:background .15s}
-.toggle-thumb{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#fff;border-radius:50%;box-shadow:0 1px 3px #0003;transition:transform .15s}
-.toggle-switch input:checked+.toggle-track{background:#2b7182}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:20px;height:20px;background:#F6F0E2;border-radius:50%;box-shadow:0 1px 3px #0003;transition:transform .15s}
+.toggle-switch input:checked+.toggle-track{background:#5A7D62}
 .toggle-switch input:checked+.toggle-track .toggle-thumb{transform:translateX(20px)}
-.toggle-switch input:focus-visible+.toggle-track{outline:2px solid #2b7182;outline-offset:2px}
+.toggle-switch input:focus-visible+.toggle-track{outline:2px solid #5A7D62;outline-offset:2px}
 /* display:none is the default, flex only when actually shown - an
    unconditional display:flex here would override the browser's own
    [hidden]{display:none} handling of the modal's `hidden` attribute
@@ -81,30 +81,59 @@ button{border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:point
    stylesheet), leaving it visible on every launch regardless of hidden. */
 .modal-backdrop{display:none;position:fixed;inset:0;background:#0009;align-items:center;justify-content:center;z-index:20}
 .modal-backdrop:not([hidden]){display:flex}
-.modal-card{background:#fff;border-radius:12px;padding:22px;width:340px;max-width:90vw;display:grid;gap:12px;box-shadow:0 8px 30px #0004}
-.modal-card h2{margin:0;font-size:1.1rem;color:#173F4F}
+.modal-card{background:#F6F0E2;border-radius:12px;padding:22px;width:340px;max-width:90vw;display:grid;gap:12px;box-shadow:0 8px 30px #0004}
+.modal-card h2{margin:0;font-size:1.1rem;color:#2E312D}
 .modal-card input{width:100%}
-.now-playing{position:fixed;bottom:0;left:0;right:0;background:#173F4F;color:#fff;padding:12px 22px;display:flex;justify-content:space-between;align-items:center;gap:20px;box-shadow:0 -2px 12px #0003}
+.now-playing{position:fixed;bottom:0;left:0;right:0;background:#2E312D;color:#fff;padding:12px 22px;display:flex;justify-content:space-between;align-items:center;gap:20px;box-shadow:0 -2px 12px #0003}
 .np-info{flex:1;min-width:0}
 .np-info strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .np-seek{-webkit-appearance:none;appearance:none;display:block;width:100%;height:6px;margin:9px 0;border-radius:999px;background:#ffffff2a;cursor:pointer}
 .np-seek::-webkit-slider-runnable-track{height:6px;border-radius:999px;background:transparent}
 .np-seek::-moz-range-track{height:6px;border-radius:999px;background:transparent}
-.np-seek::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-4px;border-radius:50%;background:#4fb3c4;cursor:pointer}
-.np-seek::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:#4fb3c4;cursor:pointer}
+.np-seek::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-4px;border-radius:50%;background:#97AE96;cursor:pointer}
+.np-seek::-moz-range-thumb{width:14px;height:14px;border:none;border-radius:50%;background:#97AE96;cursor:pointer}
 .np-controls button{background:#ffffff1c;color:#fff;font-size:1.1rem;padding:8px 14px}
 
 /* ---- Song requests ---- */
-.requests-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#fff;border:1px solid #d8e2e3;border-radius:12px;padding:12px 16px;margin-bottom:14px}
+.requests-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:#F6F0E2;border:1px solid #D6C6A6;border-radius:12px;padding:12px 16px;margin-bottom:14px}
 .requests-bar .toggle-row{flex:1;min-width:260px;font-weight:600}
 .requests-bar .eyebrow{text-transform:none;letter-spacing:0;margin-left:8px}
 .request-tag{background:#fdf1d8;color:#8a5a00;border-radius:999px;padding:2px 10px;font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;flex:0 0 auto}
-.pairing-box{background:#eef8f9;border:1px solid #b7dde2;border-radius:10px;padding:14px;display:grid;gap:6px}
+.pairing-box{background:#EFE6D2;border:1px solid #b7dde2;border-radius:10px;padding:14px;display:grid;gap:6px}
 .pairing-box p{margin:0}
-.pairing-address{font-family:ui-monospace,Consolas,monospace;font-weight:700;font-size:1.05rem;color:#173F4F;word-break:break-all}
-.pairing-code{font-size:2.2rem;font-weight:800;letter-spacing:.3em;color:#173F4F;font-variant-numeric:tabular-nums}
+.pairing-address{font-family:ui-monospace,Consolas,monospace;font-weight:700;font-size:1.05rem;color:#2E312D;word-break:break-all}
+.pairing-code{font-size:2.2rem;font-weight:800;letter-spacing:.3em;color:#2E312D;font-variant-numeric:tabular-nums}
 
 /* Narrow / portrait screens (2026-10-07): the top bar wraps instead of
    squeezing the title, and the player bar stacks its buttons. */
 @media (max-width:820px){.topbar{flex-wrap:wrap;gap:10px 16px}.topbar nav{flex-wrap:wrap}.shell{padding:16px}}
 @media (max-width:620px){.now-playing{flex-direction:column;align-items:stretch;gap:8px}.np-controls{display:flex;justify-content:center;gap:6px}body{padding-bottom:130px}}
+
+/* ---- MSLSC retro surf look (Sam, 2026-10-10) ----
+   One look across every club system: sand, off-white, charcoal and the
+   club's faded red and green, the bar mat's stripes along the top,
+   Shrikhand for page titles, Barlow / Barlow Condensed for everything else.
+   Fonts are self-hosted (../request/fonts). Older colours in this file were mapped
+   onto the same palette. */
+@font-face{font-family:"Shrikhand";font-weight:400;font-display:swap;src:url(../request/fonts/shrikhand-400.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-weight:500;font-display:swap;src:url(../request/fonts/barlow-500.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-weight:600;font-display:swap;src:url(../request/fonts/barlow-600.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-weight:700;font-display:swap;src:url(../request/fonts/barlow-700.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-weight:800;font-display:swap;src:url(../request/fonts/barlow-800.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:600;font-display:swap;src:url(../request/fonts/barlow-condensed-600.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:700;font-display:swap;src:url(../request/fonts/barlow-condensed-700.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:800;font-display:swap;src:url(../request/fonts/barlow-condensed-800.woff2) format("woff2")}
+:root{
+  --surf-sand:#E9DFCB;--surf-sand-2:#D6C6A6;--surf-paper:#F6F0E2;
+  --surf-charcoal:#2E312D;--surf-green:#5A7D62;--surf-green-dark:#3C5642;
+  --surf-red:#B04A3C;--surf-red-dark:#7E3329;--surf-muted:#716B5E;
+  --surf-stripes:linear-gradient(180deg,#2E312D 0 16%,#B04A3C 16% 44%,#F6F0E2 44% 72%,#5A7D62 72% 100%);
+}
+body{font-family:Barlow,system-ui,-apple-system,"Segoe UI",sans-serif;background-color:var(--surf-sand)}
+body::before{content:"";position:fixed;left:0;right:0;top:0;height:10px;z-index:2147483000;pointer-events:none;background:var(--surf-stripes)}
+body{padding-top:10px}
+h1{font-family:"Shrikhand",Georgia,serif;font-weight:400;letter-spacing:0;color:var(--surf-red);text-shadow:2px 2px 0 var(--surf-charcoal);line-height:1.15}
+h2,h3,h4{font-family:Barlow,system-ui,sans-serif;font-weight:800}
+.eyebrow{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:700;letter-spacing:.1em}
+button,input,select,textarea{font-family:inherit}
+@media print{body{background:#fff;padding-top:0}body::before{display:none}}
