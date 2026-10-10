@@ -11,7 +11,7 @@
    --t-accent --t-accent-text --t-accent-2 --t-accent-2-text --t-highlight
    --t-danger --t-good --t-warn --t-header-bg --t-header-text --t-input-bg
    --t-stripe --t-radius --t-font-display --t-font-body --t-font-label
-   plus data-theme-mode="light|dark", data-theme-glow, data-theme-sunburst
+   plus data-theme-mode="light|dark", data-theme-glow, data-theme-sunburst, data-theme-jukebox
    and data-theme="<name>" on <html>. A "mslsc-theme" event fires on change. */
 (function () {
   var URL = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/public-theme'
@@ -42,6 +42,7 @@
     root.setAttribute('data-theme-mode', theme.mode === 'dark' ? 'dark' : 'light')
     root.setAttribute('data-theme-glow', e.glow ? 'on' : 'off')
     root.setAttribute('data-theme-sunburst', e.sunburst ? 'on' : 'off')
+    root.setAttribute('data-theme-jukebox', e.jukebox ? 'on' : 'off') // the song picker's bubble tubes + flashing sign
     root.setAttribute('data-theme', String(theme.name || '').slice(0, 60))
     root.style.colorScheme = theme.mode === 'dark' ? 'dark' : 'light'
     try { window.dispatchEvent(new CustomEvent('mslsc-theme', { detail: theme })) } catch (err) { /* old browser */ }

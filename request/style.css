@@ -227,3 +227,22 @@ html[data-theme-sunburst=off] .top::before,html[data-theme-sunburst=off] .overla
 /* the title sits on the header bar, so it takes the header's text colour (the title colour glows behind it) */
 .brand{color:var(--t-header-text,#F3E9FF)}
 html:not([data-theme-glow=on]) .brand{text-shadow:3px 3px 0 var(--t-accent-2,#FF2E97)}
+
+/* ==== Jukebox lights (Theme Manager option, Sam 2026-10-11) ====
+   The first picker's touches (2026-09-28): a glowing bubble-tube arch over
+   the name that slowly runs through the colours, and the idle "Pick a song"
+   sign flashing like neon. Only when the theme turns "Jukebox lights" on. */
+html[data-theme-jukebox=on] .top{padding-top:64px}
+html[data-theme-jukebox=on] .top::before{
+  content:"";position:absolute;inset:auto;left:22px;right:22px;top:10px;height:170px;
+  border:9px solid transparent;border-bottom:0;border-radius:50% 50% 0 0/100% 100% 0 0;
+  background:linear-gradient(90deg,#ff3b3b,#ffb238,#ffe066,#3ee07a,#35c7ff,#b066ff,#ff3b3b) border-box;
+  -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  filter:drop-shadow(0 0 8px #ff9a3c) drop-shadow(0 0 18px #ff5a3c);
+  background-size:300% 100%;animation:tube 9s linear infinite;pointer-events:none;display:block;transform:none;
+}
+@keyframes tube{to{background-position:300% 0}}
+html[data-theme-jukebox=on] .brand{color:#fff;text-shadow:0 0 8px #fff,0 0 22px var(--t-accent,#ffb238),0 0 50px #ff5a2b}
+html[data-theme-jukebox=on] .idle h1{animation:jukebox-neon 3.5s ease-in-out infinite}
+@keyframes jukebox-neon{50%{text-shadow:0 0 6px #fff,0 0 30px #ff4bd8,0 0 60px #35c7ff}}
+@media (prefers-reduced-motion:reduce){html[data-theme-jukebox=on] .top::before,html[data-theme-jukebox=on] .idle h1{animation:none}}
