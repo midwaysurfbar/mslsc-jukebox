@@ -369,6 +369,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
         waiting: status.waiting,
         maxWaiting: MAX_WAITING,
         nowPlaying: status.nowPlaying,
+        paused: Boolean(status.paused),
         upNext: status.upNext,
       })
     }

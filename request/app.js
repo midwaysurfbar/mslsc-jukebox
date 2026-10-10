@@ -189,6 +189,7 @@ async function refreshStatus() {
     if (!s.ok) return
     const wasFull = status && status.full
     status = s
+    document.querySelector('.now .label').textContent = s.nowPlaying && s.paused ? 'Paused' : 'Now playing'
     $('now-title').textContent = s.nowPlaying ? s.nowPlaying.title : 'Nothing playing right now'
     $('now-artist').textContent = s.nowPlaying ? s.nowPlaying.artist : 'Pick a song to get it started!'
     $('up-next').innerHTML = s.upNext.length ? `<b>Up next</b>${s.upNext.map((u) => `<span>${esc(u.title)}${u.artist ? ` – ${esc(u.artist)}` : ''}</span>`).join('')}` : ''
@@ -207,8 +208,9 @@ async function refreshStatus() {
       $('closed-next-title').textContent = s.nextOpening.title
       $('closed-next-when').textContent = whenText(s.nextOpening)
     }
-    $('closed-now').textContent = nowText(s.nowPlaying)
-    $('idle-now').textContent = nowText(s.nowPlaying)
+    // only while music is actually playing - not when it's paused
+    $('closed-now').textContent = s.paused ? '' : nowText(s.nowPlaying)
+    $('idle-now').textContent = s.paused ? '' : nowText(s.nowPlaying)
     if (Boolean(wasFull) !== Boolean(s.full)) document.querySelectorAll('.song .add').forEach((b) => { b.disabled = s.full })
   } catch (err) {
     if (err.message !== 'not-paired') $('offline').hidden = false

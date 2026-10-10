@@ -36,6 +36,9 @@ function pushRequestStatus() {
   const waiting = queue.tracks.slice(firstUpcomingIndex())
   const snapshot = {
     nowPlaying: playingKey() ? describeTrack(playingKey()) : null,
+    // paused = nothing is actually playing, so the picker doesn't say
+    // "Now playing" on its closed / idle screens (Sam 2026-10-10)
+    paused: Boolean(lastPlayerState && lastPlayerState.status === 'paused'),
     upNext: waiting.slice(0, 3).map(describeTrack).filter(Boolean),
     waiting: waiting.length,
   }
@@ -89,6 +92,8 @@ jukebox.onPlayerState((state) => {
   } else if (!key && state.status === 'idle') {
     lastStartedKey = null
     pushRequestStatus()
+  } else {
+    pushRequestStatus() // play / pause (unchanged status isn't re-sent)
   }
 })
 
