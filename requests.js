@@ -58,6 +58,12 @@ const PAGE_FILES = {
   '/remote/remote.js': ['remote/remote.js', 'text/javascript; charset=utf-8'],
   '/remote/remote.css': ['remote/remote.css', 'text/css; charset=utf-8'],
 }
+// the shared club "retro surf" fonts (2026-10-10), served locally so the
+// touchscreen never needs the internet for them
+for (const f of ['shrikhand-400', 'barlow-500', 'barlow-600', 'barlow-700', 'barlow-800', 'barlow-condensed-600', 'barlow-condensed-700', 'barlow-condensed-800']) {
+  PAGE_FILES[`/fonts/${f}.woff2`] = [`request/fonts/${f}.woff2`, 'font/woff2']
+}
+PAGE_FILES['/fonts/surf-fonts.css'] = ['request/fonts/surf-fonts.css', 'text/css; charset=utf-8']
 const KINDS = new Set(['picker', 'remote'])
 const BAR_FN = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/'
 const BAR_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon key, same as the ads
