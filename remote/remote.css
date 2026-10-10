@@ -169,3 +169,18 @@ button,input,select,textarea{font-family:inherit}
 
 .tv-blank{background:transparent;color:var(--surf-muted,#716B5E);padding:10px 12px;font-weight:700;text-decoration:underline;min-height:44px}
 .find-yt{display:inline-flex;align-items:center;padding:8px 12px;border-radius:9px;background:var(--surf-red,#B04A3C);color:#fff;font-weight:700;text-decoration:none;white-space:nowrap}
+
+/* ==== Full 80s neon (Sam, 2026-10-11: "option b") ====
+   Neon pink / aqua / yellow on deep purple, same as the song picker. */
+:root{
+  --ink:#F3E9FF; --muted:#B9A8E0; --ground:#120A2A; --card:#1D1240; --line:#3B2775;
+  --deep:#0B0620; --teal:#0FA9C2; --bright:#19E3FF; --soft:#2A1C55; --red:#FF2E97; --amber:#FFD23F; --good:#19E3FF;
+  --sand:#120A2A; --sand2:#3B2775; --paper:#1D1240; --green:#0FA9C2; --green-soft:#0F3D4D; --red-soft:#43102C; --amber-soft:#43350B; --focus:#19E3FF;
+  --stripes:linear-gradient(180deg,#FFD23F 0%,#FF7A3C 30%,#FF2E97 60%,#5B1C8F 100%);
+}
+body{background:var(--ground,var(--sand));color:var(--ink);color-scheme:dark}
+input,select{background:#0B0620;color:var(--ink)}
+.secondary{color:var(--ink)}
+h1,.wordmark,.pair-card h1,.top h1{color:#FF2E97;text-shadow:0 0 6px #FF2E97,0 0 20px #FF2E9788}
+.pill.ok{background:#0F3D4D;color:#9FF3FF}
+.pill.bad{background:#43102C;color:#FF8CC4}

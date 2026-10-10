@@ -210,3 +210,32 @@ input[type=checkbox]{width:18px;height:18px;min-height:0;accent-color:var(--gree
 }
 @media (prefers-reduced-motion:reduce){.meter div{transition:none}}
 #dupe-groups{display:grid;gap:14px}
+
+/* ==== Full 80s neon (Sam, 2026-10-11: "option b") ====
+   Neon pink / aqua / yellow on deep purple, same as the song picker. */
+:root{
+  --ink:#F3E9FF; --muted:#B9A8E0; --ground:#120A2A; --card:#1D1240; --line:#3B2775;
+  --deep:#0B0620; --teal:#0FA9C2; --bright:#19E3FF; --soft:#2A1C55; --red:#FF2E97; --amber:#FFD23F; --good:#19E3FF;
+  --sand:#120A2A; --sand2:#3B2775; --paper:#1D1240; --green:#0FA9C2; --green-soft:#0F3D4D; --red-soft:#43102C; --amber-soft:#43350B; --focus:#19E3FF;
+  --stripes:linear-gradient(180deg,#FFD23F 0%,#FF7A3C 30%,#FF2E97 60%,#5B1C8F 100%);
+}
+body{background:var(--ground,var(--sand));color:var(--ink);color-scheme:dark}
+input,select{background:#0B0620;color:var(--ink)}
+.secondary{color:var(--ink)}
+h1,.wordmark,.pair-card h1,.top h1{color:#FF2E97;text-shadow:0 0 6px #FF2E97,0 0 20px #FF2E9788}
+.pill.ok{background:#0F3D4D;color:#9FF3FF}
+.pill.bad{background:#43102C;color:#FF8CC4}
+.secondary:hover:not(:disabled){background:#2A1C55}
+.song,.copy,.group-foot,.history li,.pl-songs li{border-color:#2A1C55}
+.song:hover{background:#24174D}
+.song.sel,.copy.keep{background:#0F3D4D}
+.copy.keep .verdict{color:#9FF3FF}
+.tag.queue{color:#9FF3FF}.tag.guess{color:#FFD23F}.tag.bad{color:#FF8CC4}
+.badge.likely{color:#9FF3FF}.badge.check{color:#FFD23F}
+.pl-add-results{background:#1D1240}
+.pl-item.on{background:#FF2E97}
+.drawer .close{background:#1D1240cc;color:var(--ink)}
+.intro-card.warn{box-shadow:inset 4px 0 0 #FFD23F}
+.bulk{background:#0B0620;box-shadow:0 0 0 1.5px #FF2E97}
+.seg button.on{background:#FF2E97}
+.tabs button.on{background:var(--paper);border-bottom-color:#FF2E97}

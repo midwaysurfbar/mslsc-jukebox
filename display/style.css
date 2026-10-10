@@ -74,3 +74,11 @@ body.tv-ads .deck { visibility: hidden; }
 body.tv-ads #idle { display: none; }
 body.tv-ads .ad-overlay { background: #2E312D; }
 body.tv-ads.tv-ads-empty .tv-brand { display: flex; }
+
+/* ==== Full 80s neon (Sam, 2026-10-11: "option b") ==== */
+.idle { background: #120A2A; color: #F3E9FF; }
+.idle::before { background: repeating-conic-gradient(from 0deg at 50% 50%, #FF2E9722 0 6deg, transparent 6deg 12deg); }
+.idle::after { background: linear-gradient(180deg, #FFD23F 0%, #FF7A3C 30%, #FF2E97 60%, #5B1C8F 100%); }
+.idle p { color: #FF2E97; text-shadow: 0 0 1vh #FF2E97, 0 0 3vh #FF2E9799, 0 0 6vh #FF2E9755; }
+.idle small { color: #19E3FF; text-shadow: 0 0 1.4vh #19E3FF88; }
+body.tv-ads .ad-overlay { background: #120A2A; }
