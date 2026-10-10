@@ -190,3 +190,31 @@ body.kb-open #main{padding-bottom:460px}
   .kb-row button.mid{max-width:none}
   body.kb-open #main{padding-bottom:clamp(460px,48vw,560px)}
 }
+
+/* ==== Full 80s neon (Sam, 2026-10-11: "option b") ====
+   Neon pink / aqua / yellow on deep purple, glowing lettering, a sunset
+   stripe. Overrides the surf tokens above, so the layout is unchanged. */
+:root{
+  --sand:#120A2A; --sand-2:#3B2775; --paper:#1D1240;
+  --charcoal:#0B0620; --green:#19E3FF; --red:#FF2E97; --red-2:#A3165E;
+  --red-soft:#FFD23F; --green-soft:#9FF3FF;
+  --ink:#F3E9FF; --muted:#B9A8E0;
+}
+.stripes,.top::after,.keyboard::before,.overlay::after{background:linear-gradient(180deg,#FFD23F 0%,#FF7A3C 30%,#FF2E97 60%,#5B1C8F 100%)}
+.chips button,.letters button,.kb-row button,.keypad button,.kb-done,.pill.full,.sg-cancel,.code,.now strong{color:var(--ink)}
+.chips button.on,.letters button.on{background:var(--green);border-color:var(--green);color:#120A2A;box-shadow:0 0 14px #19E3FFAA}
+.brand,.pair-card h1,.suggest-card h2,.overlay h1{color:var(--red);text-shadow:0 0 6px #FF2E97,0 0 22px #FF2E9799,0 0 44px #FF2E9755}
+.now{box-shadow:0 0 18px #19E3FF66}
+.now .label{color:var(--red-soft)}
+.song{box-shadow:0 0 0 1.5px #3B2775,0 4px 0 #3B2775}
+.song:nth-child(3n+3){border-left-color:var(--red-soft)}
+.song .add{box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--red),0 0 18px 6px #FF2E9766}
+.song .add:active{box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--red)}
+.song .add:disabled{background:#4A3B73;color:#B9A8E0;box-shadow:0 0 0 4px var(--paper),0 0 0 6px #4A3B73}
+.search,.suggest .field{background:#0B0620}
+.pill{color:#120A2A;box-shadow:0 0 12px #19E3FF88}
+.to-top,.suggest-btn{box-shadow:0 0 0 2px var(--red),0 0 16px #FF2E9788}
+.suggest{background:#0B0620CC}
+.overlay::before{background:repeating-conic-gradient(from 0deg at 50% 50%,#FF2E9722 0 6deg,transparent 6deg 12deg)}
+.next-opening{box-shadow:0 0 0 2px var(--green),0 0 20px #19E3FF66}
+.kb-done{color:#120A2A}
