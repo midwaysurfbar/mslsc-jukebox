@@ -222,6 +222,19 @@ test('New Suggestions inbox: sorted into its decade once fully arrived, unknowns
   assert.ok(fs.existsSync(path.join(inbox, 'Still Coming - Song.mp4'))) // Syncthing still copying it
   assert.ok(fs.existsSync(path.join(inbox, 'notes.txt'))) // not a video - left alone
 
+  // with the song look-up (as main.js wires it): its decade wins, and the tag matches the folder
+  fs.writeFileSync(path.join(inbox, 'Fleetwood Mac - The Chain.mp4'), 'chain')
+  const better = createInboxSorter({
+    store, library, now: () => clock,
+    metadata: { lookup: async () => ({ artist: 'Fleetwood Mac', decade: '1990s', confidence: 'high' }) },
+    lookupDecade: async (artist, title) => ({ decade: artist === 'Fleetwood Mac' && title === 'The Chain' ? '1970s' : '' }),
+  })
+  await better.run(); clock += 30000
+  assert.equal(await better.run(), 1)
+  assert.ok(fs.existsSync(path.join(media, '1970s', 'Fleetwood Mac - The Chain.mp4')))
+  const chainKey = Object.entries(store.getMetadata()).find(([, v]) => v.artist === 'Fleetwood Mac')
+  assert.equal(chainKey[1].decade, '1970s')
+
   // offline lookups wait for the next pass instead of dumping it unsorted
   fs.rmSync(path.join(inbox, '.syncthing.Still Coming - Song.mp4.tmp'))
   const offline = createInboxSorter({ store, library, now: () => clock, metadata: { lookup: async () => ({ decade: 'Unknown', confidence: 'none', offline: true }) } })

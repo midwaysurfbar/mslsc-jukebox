@@ -64,6 +64,8 @@ const inboxSorter = createInboxSorter({
   store,
   library,
   metadata,
+  // the Library Manager's better decade look-up (it's created just below)
+  lookupDecade: (artist, title) => libraryManager.lookupDecade(artist, title),
   onMoved: (_count, songs) => {
     if (requests) {
       requests.invalidateLibrary()
