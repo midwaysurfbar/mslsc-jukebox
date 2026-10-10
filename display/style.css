@@ -34,6 +34,12 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; curs
      rather than pinned to a corner. */
   object-fit: contain;
 }
+/* Waiting screen (nothing queued) in the club's retro surf look (Sam,
+   2026-10-10) - sand, faded sunburst, bar-mat stripes, Shrikhand title.
+   Behind the videos stays black, as a TV should. Fonts: ../request/fonts. */
+@font-face{font-family:"Shrikhand";font-weight:400;src:url(../request/fonts/shrikhand-400.woff2) format("woff2")}
+@font-face{font-family:"Barlow";font-weight:600;src:url(../request/fonts/barlow-600.woff2) format("woff2")}
+@font-face{font-family:"Barlow Condensed";font-weight:800;src:url(../request/fonts/barlow-condensed-800.woff2) format("woff2")}
 .idle {
   position: absolute;
   top: 0; left: 0;
@@ -42,11 +48,22 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; curs
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  color: #4a6572;
-  font-family: system-ui, -apple-system, sans-serif;
+  gap: 2.5vh;
+  overflow: hidden;
+  background: #E9DFCB;
+  color: #2E312D;
+  font-family: Barlow, system-ui, sans-serif;
   text-align: center;
 }
-.idle p { font-size: 2.5rem; font-weight: 800; letter-spacing: 0.05em; }
-.idle small { font-size: 1.1rem; opacity: 0.7; }
+.idle::before { /* faded sunburst */
+  content: ""; position: absolute; left: 50%; top: 45%; width: 260vmax; height: 260vmax; transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(from 0deg at 50% 50%, #ffffff59 0 6deg, transparent 6deg 12deg);
+}
+.idle::after { /* the bar mat's stripes along the top */
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2.2vh;
+  background: linear-gradient(180deg, #2E312D 0 16%, #B04A3C 16% 44%, #F6F0E2 44% 72%, #5A7D62 72% 100%);
+}
+.idle > * { position: relative; }
+.idle p { font-family: "Shrikhand", Georgia, serif; font-weight: 400; font-size: 11vh; line-height: 1.05; color: #B04A3C; text-shadow: 0.6vh 0.6vh 0 #2E312D; }
+.idle small { font-family: "Barlow Condensed", Barlow, sans-serif; font-weight: 800; font-size: 3.4vh; letter-spacing: .14em; text-transform: uppercase; color: #5A7D62; }
 .idle.hidden { display: none; }
