@@ -268,9 +268,10 @@ function timeAgo(ms) {
 let lastDevSig = ''
 function renderTv() {
   const tv = state.tv
-  $('tv-btn').hidden = !tv
-  $('tv-state').textContent = !tv ? '' : tv.visible ? 'TV: showing' : 'TV: hidden'
-  $('tv-btn').textContent = tv && tv.visible ? 'Hide TV' : 'Show on TV'
+  $('tv-card').hidden = !tv
+  $('tv-card').classList.toggle('on', Boolean(tv && tv.visible))
+  $('tv-state').textContent = !tv ? '' : tv.visible ? 'On - showing the Jukebox' : 'Off - blank (music still plays)'
+  $('tv-btn').textContent = tv && tv.visible ? 'Turn TV off' : 'Turn TV on'
   if (state.player) $('tv-hidden-toggle').checked = Boolean(state.player.tvStartHidden)
 }
 

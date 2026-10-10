@@ -50,7 +50,13 @@
       <button class="round" data-cmd="skip" aria-label="Skip to the next song">⏭</button>
     </div>
     <label class="volume"><span>Volume</span><input type="range" id="volume" min="0" max="100" step="5"><b id="volume-value">–</b></label>
-    <div class="tv-row"><span id="tv-state">TV: –</span><button class="tv-btn" id="tv-btn" type="button">Show on TV</button></div>
+  </section>
+
+  <!-- TV on/off: its own card under the player so it's easy to find (Sam 2026-10-10) -->
+  <section class="tv-card" id="tv-card">
+    <span class="tv-icon" aria-hidden="true">📺</span>
+    <span class="tv-text"><b>TV screen</b><span id="tv-state">–</span></span>
+    <button class="tv-btn" id="tv-btn" type="button">Turn TV on</button>
   </section>
 
   <nav class="tabs" role="tablist">
@@ -90,7 +96,7 @@
       <input type="checkbox" id="bar-toggle" class="switch">
     </label>
     <label class="switch-row">
-      <span><b>Start with the TV hidden</b><br><span class="note">When the venue PC starts, the TV stays blank until someone presses Show on TV. Music still plays.</span></span>
+      <span><b>Start with the TV hidden</b><br><span class="note">When the venue PC starts, the TV stays blank until someone presses Turn TV on. Music still plays.</span></span>
       <input type="checkbox" id="tv-hidden-toggle" class="switch">
     </label>
     <div class="code-box" id="code-box" hidden>
