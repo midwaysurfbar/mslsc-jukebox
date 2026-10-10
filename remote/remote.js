@@ -101,10 +101,56 @@ let tab = 'queue'
 document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
   tab = b.dataset.tab
   document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b))
-  for (const name of ['queue', 'search', 'playlists', 'screens']) $(`tab-${name}`).hidden = name !== tab
+  for (const name of ['queue', 'search', 'playlists', 'suggestions', 'screens']) $(`tab-${name}`).hidden = name !== tab
+  if (tab === 'suggestions') loadSuggestions()
   if (tab === 'search') { loadLibrary(); renderSearch(); $('search').focus() }
   if (tab === 'playlists') renderPlaylists()
 }))
+
+// ---------------------------------------------------------------- suggestions
+let suggestions = { waiting: [], handled: [] }
+function when(iso) {
+  return iso ? new Date(iso).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' }) : ''
+}
+async function loadSuggestions() {
+  try {
+    const r = await api('/api/remote/suggestions')
+    if (!r.ok) { if (tab === 'suggestions') toast(r.error || 'Can\'t load suggestions.', true); return }
+    suggestions = { waiting: r.waiting || [], handled: r.handled || [] }
+    renderSuggestions()
+  } catch { /* offline banner covers it */ }
+}
+function renderSuggestions() {
+  $('sg-count').textContent = suggestions.waiting.length || ''
+  const list = $('sg-list')
+  list.replaceChildren()
+  if (!suggestions.waiting.length) list.append(el('li', { class: 'empty', text: 'No suggestions waiting.' }))
+  for (const s of suggestions.waiting) {
+    list.append(el('li', { class: 'row' },
+      el('span', { class: 'what' }, el('b', { text: s.song }), el('span', { text: [s.artist, `asked ${s.times} time${s.times === 1 ? '' : 's'}`, `last ${when(s.last_at)}`].filter(Boolean).join(' · ') })),
+      el('span', { class: 'acts' },
+        el('button', { class: 'primary', text: 'Added', 'data-sg': s.id, 'data-st': 'added' }),
+        el('button', { class: 'secondary', text: 'Dismiss', 'data-sg': s.id, 'data-st': 'dismissed' }))))
+  }
+  const done = $('sg-done')
+  done.replaceChildren()
+  if (!suggestions.handled.length) done.append(el('li', { class: 'empty', text: 'Nothing yet.' }))
+  for (const s of suggestions.handled) {
+    done.append(el('li', { class: 'row' },
+      el('span', { class: 'what' }, el('b', { text: s.song }), el('span', { text: [s.artist, `${s.status === 'added' ? 'Added' : 'Dismissed'} ${when(s.handled_at)}`].filter(Boolean).join(' · ') })),
+      el('span', { class: 'acts' }, el('button', { class: 'secondary', text: 'Undo', 'data-sg': s.id, 'data-st': 'new' }))))
+  }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-sg]')
+  if (!b) return
+  b.disabled = true
+  const r = await command('suggestion-status', { id: b.dataset.sg, status: b.dataset.st }, b.dataset.st === 'added' ? 'Marked as added.' : b.dataset.st === 'dismissed' ? 'Dismissed.' : 'Back on the list.')
+  if (r.ok) loadSuggestions()
+  else b.disabled = false
+})
+// the count on the tab stays current even when it's not open
+setInterval(() => { if (token) loadSuggestions() }, 60 * 1000)
 
 // ---------------------------------------------------------------- now playing
 document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', () => command(b.dataset.cmd)))
@@ -394,6 +440,7 @@ function start() {
   $('main').hidden = false
   lastQueueSig = lastPlSig = lastDevSig = ''
   poll()
+  loadSuggestions()
   loadLibrary()
   clearInterval(pollTimer)
   pollTimer = setInterval(poll, 1000)

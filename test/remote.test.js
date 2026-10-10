@@ -241,3 +241,44 @@ test('Remote preview video: remotes only, byte ranges, unknown keys 404', async 
   assert.equal((await get(key, picker)).status, 403) // song pickers can't pull videos
   assert.equal((await get(key, 'nope')).status, 401)
 })
+
+test('Song suggestions: picker sends, rate limit, offline queue, Remote ticks off with the venue key', async (t) => {
+  const calls = []
+  let offline = false
+  const fetchImpl = async (url, opts) => {
+    if (offline) throw new Error('offline')
+    const body = JSON.parse(opts.body)
+    calls.push({ url, body })
+    if (body.action === 'list') return { json: async () => ({ ok: true, waiting: [{ id: 'a1', song: 'Song', artist: 'Band', times: 2 }], handled: [] }) }
+    return { json: async () => ({ ok: true }) }
+  }
+  const fake = start(t, { fetchImpl })
+  const picker = await pair(fake, 'picker')
+  const remote = await pair(fake, 'remote')
+  const post = (path, token, body) => call(path, { token, body })
+
+  let r = await post('/api/suggest', picker, { song: '  Wonderwall ', artist: 'Oasis' })
+  assert.equal(r.data.ok, true)
+  assert.deepEqual(calls.at(-1).body, { action: 'add', song: 'Wonderwall', artist: 'Oasis' })
+  assert.ok(calls.at(-1).url.endsWith('/jukebox-suggestions'))
+  assert.equal((await post('/api/suggest', picker, { song: 'x' })).data.ok, false) // too short
+
+  offline = true
+  r = await post('/api/suggest', picker, { song: 'Champagne Supernova', artist: 'Oasis' })
+  assert.equal(r.data.queued, true)
+  offline = false
+
+  for (let i = 0; i < 3; i++) await post('/api/suggest', picker, { song: `Song ${i}`, artist: '' })
+  r = await post('/api/suggest', picker, { song: 'One too many', artist: '' })
+  assert.equal(r.data.ok, false) // 5 in 10 minutes per screen
+
+  r = await call('/api/remote/suggestions', { token: remote })
+  assert.equal(r.data.waiting[0].song, 'Song')
+  assert.equal((await call('/api/remote/suggestions', { token: picker })).status, 403)
+
+  // no venue key on this PC yet - refused without calling out
+  const before = calls.length
+  r = await post('/api/remote/command', remote, { action: 'suggestion-status', args: { id: 'a1', status: 'added' } })
+  assert.equal(r.data.ok, false)
+  assert.equal(calls.length, before)
+})

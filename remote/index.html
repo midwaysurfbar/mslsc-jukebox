@@ -67,6 +67,7 @@
     <button role="tab" data-tab="queue" class="on">Up next <span class="count" id="queue-count"></span></button>
     <button role="tab" data-tab="search">Add songs</button>
     <button role="tab" data-tab="playlists">Playlists</button>
+    <button role="tab" data-tab="suggestions">Suggestions <span class="count" id="sg-count"></span></button>
     <button role="tab" data-tab="screens">Requests &amp; screens</button>
   </nav>
 
@@ -88,6 +89,14 @@
   <section class="panel" id="tab-playlists" hidden>
     <input class="search" id="pl-search" type="search" placeholder="Find a playlist" autocomplete="off">
     <ol class="rows" id="pl-list"></ol>
+  </section>
+
+  <!-- Songs members asked for that aren't in the library (Sam 2026-10-10).
+       Also on the Hub. Find the video, put it in the media folder, tick it. -->
+  <section class="panel" id="tab-suggestions" hidden>
+    <p class="note" style="margin:0 0 10px">Songs people asked for on the song picker that aren't in the library. Find the music video, put it in the media folder, then tick it off.</p>
+    <ol class="rows" id="sg-list"></ol>
+    <details class="sg-handled"><summary>Recently added or dismissed</summary><ol class="rows" id="sg-done"></ol></details>
   </section>
 
   <section class="panel" id="tab-screens" hidden>

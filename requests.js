@@ -101,6 +101,37 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     if (!data || !data.ok) throw new Error('bar status unavailable')
     return data
   }
+  // ---- song suggestions (Sam, 2026-10-10) ----
+  // Songs members want that aren't in the library. Kept centrally (the
+  // jukebox-suggestions function) so staff see them on the Remote and the
+  // Hub. If the internet is down they wait here and go later.
+  const SUGGEST_PENDING = path.join(userData, 'suggestions-pending.json')
+  const SUGGEST_KEY_PATH = path.join(userData, 'suggestions.json') // { venueKey } - set on the venue PC, never in the repo
+  const suggestHits = new Map() // device id -> recent suggestion times
+  const cleanText = (v) => String(v || '').replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  async function callSuggest(body) {
+    const res = await fetchImpl(BAR_FN + 'jukebox-suggestions', {
+      method: 'POST',
+      headers: { apikey: BAR_KEY, Authorization: `Bearer ${BAR_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(10000),
+    })
+    const data = await res.json().catch(() => null)
+    if (!data) throw new Error('no answer')
+    return data
+  }
+  async function flushSuggestions() {
+    const waiting = readJson(SUGGEST_PENDING, [])
+    if (!Array.isArray(waiting) || !waiting.length) return
+    const left = []
+    for (const item of waiting) {
+      try { await callSuggest({ action: 'add', song: item.song, artist: item.artist }) } catch { left.push(item) }
+    }
+    writeJson(SUGGEST_PENDING, left)
+  }
+  const suggestTimer = setInterval(() => { flushSuggestions().catch(() => {}) }, 60 * 1000)
+  if (suggestTimer.unref) suggestTimer.unref()
+
   async function checkBar() {
     try {
       const open = Boolean((await callBarFn('public-kiosk-state')).session?.is_open)
@@ -262,6 +293,9 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       if (!file) return send(res, 404, 'Not found', 'text/plain')
       return streamVideo(req, res, file)
     }
+    if (req.method === 'GET' && url.pathname === '/api/remote/suggestions') {
+      try { return send(res, 200, await callSuggest({ action: 'list' })) } catch { return send(res, 200, { ok: false, error: 'Can\'t reach the suggestions list right now.' }) }
+    }
     if (req.method === 'POST' && url.pathname === '/api/remote/command') {
       const { action, args } = await readBody(req)
       const a = args && typeof args === 'object' ? args : {}
@@ -283,6 +317,11 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
         if (action === 'tv-show') tv.show()
         else tv.hide()
         return send(res, 200, { ok: true })
+      }
+      if (action === 'suggestion-status') {
+        const venueKey = (readJson(SUGGEST_KEY_PATH, {}) || {}).venueKey
+        if (!venueKey) return send(res, 200, { ok: false, error: 'This Jukebox isn\'t set up to manage suggestions.' })
+        try { return send(res, 200, await callSuggest({ action: 'set-status', id: String(a.id || ''), status: String(a.status || ''), venueKey })) } catch { return send(res, 200, { ok: false, error: 'Can\'t reach the suggestions list right now.' }) }
       }
       if (action === 'pair') { startPairing(a.kind); return send(res, 200, { ok: true }) }
       if (action === 'cancel-pair') { pairing = null; notifyControl(); return send(res, 200, { ok: true }) }
@@ -389,6 +428,28 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       return
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/suggest') {
+      const { song, artist } = await readBody(req)
+      const s = cleanText(song)
+      const a = cleanText(artist)
+      if (s.length < 2) return send(res, 200, { ok: false, error: 'Please type the song name.' })
+      const now = Date.now()
+      const hits = (suggestHits.get(device.id) || []).filter((t) => now - t < 10 * 60 * 1000)
+      if (hits.length >= 5) return send(res, 200, { ok: false, error: 'Thanks! That\'s plenty for now - try again in a few minutes.' })
+      hits.push(now)
+      suggestHits.set(device.id, hits)
+      try {
+        const r = await callSuggest({ action: 'add', song: s, artist: a })
+        return send(res, 200, r.ok ? { ok: true, again: Boolean(r.again) } : { ok: false, error: r.error || 'That couldn\'t be sent.' })
+      } catch {
+        const waiting = readJson(SUGGEST_PENDING, [])
+        const list = Array.isArray(waiting) ? waiting : []
+        if (list.length < 200) list.push({ song: s, artist: a })
+        writeJson(SUGGEST_PENDING, list)
+        return send(res, 200, { ok: true, queued: true })
+      }
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/request') {
       if (!config.enabled) return send(res, 200, { ok: false, reason: 'closed' })
       if (!barAllows()) return send(res, 200, { ok: false, reason: 'bar-closed' })
@@ -462,6 +523,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     checkBar,
     close: () => new Promise((resolve) => {
       clearInterval(barTimer)
+      clearInterval(suggestTimer)
       barTimer = null
       return server ? server.close(() => { server = null; resolve() }) : resolve()
     }),

@@ -224,11 +224,11 @@ function buildKeyboard() {
   for (const row of ROWS) {
     const r = document.createElement('div'); r.className = 'kb-row'
     for (const ch of row) r.append(key(ch, () => typeChar(ch.toLowerCase())))
-    if (row.startsWith('Z')) r.append(key('⌫', () => { query = query.slice(0, -1); searchChanged() }, 'mid'))
+    if (row.startsWith('Z')) r.append(key('⌫', () => setText(getText().slice(0, -1)), 'mid'))
     keys.append(r)
   }
   const last = document.createElement('div'); last.className = 'kb-row'
-  last.append(key('Clear', () => { query = ''; searchChanged() }, 'mid'), key('Space', () => typeChar(' '), 'wide'), key('&', () => typeChar('&')), key("'", () => typeChar("'")))
+  last.append(key('Clear', () => setText(''), 'mid'), key('Space', () => typeChar(' '), 'wide'), key('&', () => typeChar('&')), key("'", () => typeChar("'")))
   keys.append(last)
 }
 function key(label, onTap, cls) {
@@ -237,7 +237,14 @@ function key(label, onTap, cls) {
   b.addEventListener('click', onTap)
   return b
 }
-function typeChar(ch) { if (query.length < 40) { query += ch; searchChanged() } }
+function typeChar(ch) { const t = getText(); if (t.length < 40) setText(t + ch) }
+// The keyboard types into the search, or a field of the suggestion form.
+let kbTarget = 'search'
+const suggestion = { song: '', artist: '' }
+function getText() { return kbTarget === 'search' ? query : suggestion[kbTarget] }
+function setText(v) {
+  if (kbTarget === 'search') { query = v; searchChanged() } else { suggestion[kbTarget] = v; renderSuggest() }
+}
 let searchTimer
 function searchChanged() {
   $('kb-preview').textContent = query || 'Type a song or artist…'
@@ -258,13 +265,67 @@ function setKeyboard(open) {
   $('keyboard').hidden = !open
   document.body.classList.toggle('kb-open', open)
 }
-$('search-btn').addEventListener('click', () => { setKeyboard(true); searchChanged() })
-$('kb-done').addEventListener('click', () => setKeyboard(false))
+$('search-btn').addEventListener('click', () => { kbTarget = 'search'; setKeyboard(true); searchChanged() })
+
+// ---- suggest a song that isn't in the library -----------------------------
+function openSuggest(prefill) {
+  suggestion.song = prefill || ''
+  suggestion.artist = ''
+  $('suggest').hidden = false
+  focusField('song')
+}
+function focusField(which) {
+  kbTarget = which
+  setKeyboard(true)
+  renderSuggest()
+}
+function renderSuggest() {
+  for (const f of ['song', 'artist']) {
+    $(`sg-${f}`).querySelector('b').textContent = suggestion[f]
+    $(`sg-${f}`).classList.toggle('on', kbTarget === f)
+  }
+  if (kbTarget !== 'search') $('kb-preview').textContent = suggestion[kbTarget] || (kbTarget === 'song' ? 'Type the song…' : 'Type the artist…')
+}
+function closeSuggest() {
+  $('suggest').hidden = true
+  kbTarget = 'search'
+  setKeyboard(false)
+  searchChanged()
+}
+let sending = false
+async function sendSuggestion() {
+  if (sending) return
+  if (suggestion.song.trim().length < 2) { focusField('song'); toast('Please type the song name first.', 'warn'); return }
+  sending = true
+  try {
+    const r = await api('/api/suggest', { method: 'POST', body: JSON.stringify({ song: suggestion.song, artist: suggestion.artist }) })
+    if (r.ok) {
+      closeSuggest()
+      toast(`Thanks! <small>We'll look at adding “${esc(suggestion.song.trim())}”.</small>`, 'ok')
+    } else toast(esc(r.error || 'That couldn\'t be sent.'), 'warn')
+  } catch (err) {
+    if (err.message !== 'not-paired') toast('Couldn\'t reach the Jukebox.<small>Please try again.</small>', 'warn')
+  } finally {
+    sending = false
+  }
+}
+$('suggest-btn').addEventListener('click', () => openSuggest(''))
+$('empty-suggest').addEventListener('click', () => openSuggest(query.trim()))
+$('sg-song').addEventListener('click', () => focusField('song'))
+$('sg-artist').addEventListener('click', () => focusField('artist'))
+$('sg-cancel').addEventListener('click', closeSuggest)
+$('sg-send').addEventListener('click', sendSuggestion)
+$('kb-done').addEventListener('click', () => {
+  // in the suggestion form, Done moves song -> artist, then closes the keyboard
+  if (kbTarget === 'song') return focusField('artist')
+  setKeyboard(false)
+})
 
 // ---- idle: back to "Pick a song" after a minute untouched -----------------
 let idleTimer
 function resetToStart() {
   query = ''; decade = ''; letter = ''
+  $('suggest').hidden = true; kbTarget = 'search'
   setKeyboard(false); $('toast').hidden = true
   searchChanged()
   applyFilters()

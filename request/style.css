@@ -102,7 +102,26 @@ body.kb-open .to-top{display:none}
   background:var(--red);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 5px 0 6px var(--red-2)}
 .song .add:active{transform:translateY(3px);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 2px 0 6px var(--red-2)}
 .song .add:disabled{background:#a59d8e;box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--sand-2),0 5px 0 6px #7d7669;color:#f3eee3}
-.empty{text-align:center;color:var(--muted);font-size:22px;font-weight:600;padding:40px}
+.empty{text-align:center;color:var(--muted);font-size:22px;font-weight:600;padding:30px 40px 40px}
+.empty p{margin:0 0 18px}
+
+/* ---- suggest a song (Sam 2026-10-10) ---- */
+.suggest-btn{font-family:var(--label);font-weight:800;font-size:18px;letter-spacing:.06em;text-transform:uppercase;padding:14px 20px;border-radius:999px;
+  background:var(--charcoal);color:var(--paper);box-shadow:0 3px 0 var(--red)}
+.suggest-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--red)}
+.suggest-btn.big{font-size:21px;padding:16px 28px}
+.suggest{position:fixed;inset:0;z-index:19;background:#2E312D99;display:flex;justify-content:center;align-items:flex-start;padding:28px 18px}
+.suggest-card{width:min(640px,100%);background:var(--paper);border-radius:26px;padding:24px 26px 26px;box-shadow:0 8px 0 var(--sand-2),0 24px 50px #0006;border-top:14px solid var(--red);display:grid;gap:14px}
+.suggest-card h2{margin:0;font-family:var(--display);font-weight:400;font-size:36px;color:var(--red);text-shadow:3px 3px 0 var(--charcoal)}
+.suggest-card p{margin:0;font-size:19px;font-weight:600;color:var(--muted)}
+.suggest .field{display:grid;gap:4px;text-align:left;background:#fffaf0;border:4px solid var(--sand-2);border-radius:18px;padding:12px 18px;min-height:78px}
+.suggest .field.on{border-color:var(--green)}
+.suggest .field span{font-family:var(--label);font-weight:800;letter-spacing:.14em;text-transform:uppercase;font-size:14px;color:var(--green)}
+.suggest .field b{font-size:24px;font-weight:700;min-height:1.2em;color:var(--ink)}
+.sg-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:4px}
+.sg-actions button{font-family:var(--label);font-weight:800;font-size:20px;letter-spacing:.06em;text-transform:uppercase;padding:14px 24px;border-radius:16px}
+.sg-cancel{background:var(--sand);color:var(--charcoal);box-shadow:0 3px 0 var(--sand-2)}
+.sg-send{background:var(--red);color:#fff;box-shadow:0 4px 0 var(--red-2)}
 #more{height:40px}
 /* room to scroll the matches above the on-screen keyboard */
 body.kb-open #main{padding-bottom:460px}

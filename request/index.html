@@ -39,14 +39,32 @@
 
   <div class="tools">
     <button class="search" id="search-btn" type="button"><span id="search-text">Search songs or artists</span></button>
+    <button class="suggest-btn" id="suggest-btn" type="button">Suggest a song</button>
     <div class="chips" id="decades"></div>
   </div>
   <div class="letters" id="letters"></div>
 
   <div class="grid" id="grid"></div>
   <div id="more"></div>
-  <p class="empty" id="empty" hidden>No songs match that – try another search.</p>
+  <div class="empty" id="empty" hidden>
+    <p>No songs match that.</p>
+    <button class="suggest-btn big" id="empty-suggest" type="button">Can't find it? Suggest it</button>
+  </div>
   <button class="to-top" id="to-top" type="button" hidden>▲ Back to search &amp; filters</button>
+</section>
+
+<!-- Suggest a song that isn't in the library (Sam 2026-10-10) -->
+<section class="suggest" id="suggest" hidden>
+  <div class="suggest-card">
+    <h2>Suggest a song</h2>
+    <p>Can't find it? Tell us and we'll try to add it to the Jukebox.</p>
+    <button class="field" id="sg-song" type="button"><span>Song</span><b></b></button>
+    <button class="field" id="sg-artist" type="button"><span>Artist</span><b></b></button>
+    <div class="sg-actions">
+      <button class="sg-cancel" id="sg-cancel" type="button">Cancel</button>
+      <button class="sg-send" id="sg-send" type="button">Send suggestion</button>
+    </div>
+  </div>
 </section>
 
 <!-- On-screen keyboard -->

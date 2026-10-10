@@ -78,7 +78,7 @@ h2{font-size:1.05rem;margin:22px 0 8px}
 .tv-card.on .tv-btn{background:var(--red)}
 
 /* ---- tabs + panels ---- */
-.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px;position:sticky;top:0;z-index:2}
+.tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:6px;position:sticky;top:0;z-index:2}
 .tabs button{background:transparent;color:var(--teal);padding:10px 6px;font-size:.95rem}
 .tabs button.on{background:var(--teal);color:#fff}
 .count{display:inline-block;min-width:1.6em;padding:0 6px;margin-left:4px;border-radius:999px;background:var(--soft);color:var(--teal);font-size:.8rem}
@@ -161,3 +161,8 @@ h2,h3,h4{font-family:Barlow,system-ui,sans-serif;font-weight:800}
 .eyebrow{font-family:"Barlow Condensed",Barlow,sans-serif;font-weight:700;letter-spacing:.1em}
 button,input,select,textarea{font-family:inherit}
 @media print{body{background:#fff;padding-top:0}body::before{display:none}}
+
+/* suggestions tab */
+.sg-handled{margin-top:14px}
+.sg-handled summary{cursor:pointer;font-weight:700;color:var(--muted);padding:6px 0}
+.rows .empty{color:var(--muted);padding:10px}
