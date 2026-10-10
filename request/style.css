@@ -85,6 +85,13 @@ button:focus-visible{outline:3px solid var(--glow);outline-offset:3px}
 .letters{display:flex;gap:7px;flex-wrap:wrap;padding:8px 24px 12px;justify-content:center}
 .letters button{padding:10px 0;min-width:46px;font-size:18px;border-radius:50%;aspect-ratio:1}
 
+/* scrolled down the list: the search, decades and letters are up off the
+   screen (no scroll bar on the kiosk), so a button brings them back */
+.to-top{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:15;padding:16px 30px;font-size:20px;font-weight:800;border-radius:999px;
+  background:radial-gradient(circle at 50% 35%,#ffe7a8,var(--amber) 55%,#c47a0e);color:#3a1d05;box-shadow:0 0 18px var(--amber),0 8px 20px #000c,0 3px 0 #7a4a08}
+.to-top:active{transform:translateX(-50%) translateY(2px)}
+body.kb-open .to-top{display:none}
+
 /* ---- songs: 45rpm title strips ---- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px;padding:12px 24px 30px}
 .song{position:relative;background:var(--paper);color:var(--paper-ink);border-radius:6px;display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;

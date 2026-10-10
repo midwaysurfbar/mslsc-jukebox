@@ -131,6 +131,13 @@ function showMore() {
 // load the next batch as the list scrolls near its end
 new IntersectionObserver((entries) => { if (entries[0].isIntersecting && shown < filtered.length) showMore() }, { rootMargin: '600px' }).observe($('more'))
 
+// "Back to search & filters" once the letters row has scrolled off the top
+function updateToTop() {
+  $('to-top').hidden = $('letters').getBoundingClientRect().bottom > document.querySelector('.top').getBoundingClientRect().bottom
+}
+window.addEventListener('scroll', updateToTop, { passive: true })
+$('to-top').addEventListener('click', () => { window.scrollTo(0, 0); updateToTop() })
+
 // ---- requesting -----------------------------------------------------------
 let busy = false
 async function requestSong(track, button) {
