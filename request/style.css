@@ -218,3 +218,4 @@ body.kb-open #main{padding-bottom:460px}
 .overlay::before{background:repeating-conic-gradient(from 0deg at 50% 50%,#FF2E9722 0 6deg,transparent 6deg 12deg)}
 .next-opening{box-shadow:0 0 0 2px var(--green),0 0 20px #19E3FF66}
 .kb-done{color:#120A2A}
+.top,.next-opening,#kb-preview,.to-top,.suggest-btn{color:var(--ink)}
