@@ -58,6 +58,7 @@ function adBreakDue() {
 // the transition itself (crossfade or straight cut) proceeds completely
 // normally in parallel.
 function noteSongTransition() {
+  if (tvMode === 'ads') return // the TV is already showing nothing but ads
   songsPlayedSinceAd += 1
   if (adBreakDue()) {
     songsPlayedSinceAd = 0
@@ -348,7 +349,7 @@ async function beginCrossfade() {
 
 function onTimeUpdate() {
   if (isTransitioning || !activeDeck.duration || activeDeck.duration - activeDeck.currentTime > crossfadeSeconds) return
-  if (introVideoEnabled) {
+  if (introVideoEnabled && tvMode !== 'ads') {
     // No early crossfade in this mode - the outgoing track plays out to
     // its natural end (onEnded, below) instead. This just fires the same
     // ad-break decision at the same lead time a crossfade would have,
@@ -363,7 +364,7 @@ function onTimeUpdate() {
 
 function onEnded() {
   if (isTransitioning) return
-  if (introVideoEnabled) {
+  if (introVideoEnabled && tvMode !== 'ads') {
     if (!introTransitionNoted) { introTransitionNoted = true; noteSongTransition() }
     playIntroThenNext()
     return
@@ -474,3 +475,38 @@ jukebox.getSettings().then((settings) => {
 // The bundled clip's path never changes at runtime - just fetched once
 // at startup, not re-fetched on every settings update.
 jukebox.getIntroVideoPath().then((filePath) => { introVideoPath = filePath })
+
+
+// ---- TV ad mode (Sam, 2026-10-10) -----------------------------------------
+// "Turn TV off" on the Remote shows the club's ads instead of a black screen:
+// the videos are hidden (they keep playing, so the music carries on) and the
+// Ad Manager's TV ads loop full screen. No ads at all = the club's own screen.
+let tvMode = 'videos'
+let adLoopRunning = false
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+async function runAdLoop() {
+  if (adLoopRunning) return
+  adLoopRunning = true
+  let last = -1
+  while (tvMode === 'ads') {
+    if (!adImages.length) await refreshAdImages()
+    document.body.classList.toggle('tv-ads-empty', !adImages.length)
+    if (!adImages.length) { await wait(10000); continue }
+    let i = Math.floor(Math.random() * adImages.length)
+    if (adImages.length > 1 && i === last) i = (i + 1) % adImages.length
+    last = i
+    adOverlay.classList.add('active')
+    await showAdImage(adImages[i])
+  }
+  if (!adBreakInProgress) { adOverlay.classList.remove('active'); adImageEl.removeAttribute('src') }
+  document.body.classList.remove('tv-ads-empty')
+  adLoopRunning = false
+}
+function applyTvMode(mode) {
+  tvMode = mode === 'ads' ? 'ads' : 'videos'
+  document.body.classList.toggle('tv-ads', tvMode === 'ads')
+  if (tvMode === 'ads') runAdLoop()
+  else if (!adBreakInProgress) adOverlay.classList.remove('active')
+}
+jukebox.onTvMode(applyTvMode)
+jukebox.getTvMode().then(applyTvMode).catch(() => {})

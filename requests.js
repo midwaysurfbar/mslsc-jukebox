@@ -285,7 +285,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
 
   async function handleRemote(req, res, url, device) {
     if (req.method === 'GET' && url.pathname === '/api/remote/state') {
-      return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState(), tv: tv ? { visible: Boolean(tv.visible()) } : null })
+      return send(res, 200, { ok: true, version: appVersion, you: device.id, player: remoteStatus, requests: remoteRequestsState(), tv: tv ? { visible: Boolean(tv.visible()), mode: tv.mode ? tv.mode() : (tv.visible() ? 'videos' : 'blank') } : null })
     }
     // The Remote's little muted previews of what's playing and what's next.
     if (req.method === 'GET' && url.pathname === '/api/remote/video') {
@@ -312,9 +312,10 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
         notifyControl()
         return send(res, 200, { ok: true })
       }
-      if (action === 'tv-show' || action === 'tv-hide') {
+      if (action === 'tv-show' || action === 'tv-hide' || action === 'tv-blank') {
         if (!tv) return send(res, 200, { ok: false, error: 'The TV can\'t be changed from here.' })
         if (action === 'tv-show') tv.show()
+        else if (action === 'tv-blank' && tv.blank) tv.blank()
         else tv.hide()
         return send(res, 200, { ok: true })
       }

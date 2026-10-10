@@ -346,9 +346,12 @@ $('pl-list').addEventListener('click', (e) => {
 // ---------------------------------------------------------------- requests & screens
 $('tv-hidden-toggle').addEventListener('change', () => command('tv-start-hidden', { hidden: $('tv-hidden-toggle').checked }, $('tv-hidden-toggle').checked ? 'The TV will start hidden.' : 'The TV will show at start-up.'))
 $('tv-btn').addEventListener('click', () => {
-  const showing = state && state.tv && state.tv.visible
-  command(showing ? 'tv-hide' : 'tv-show', {}, showing ? 'TV hidden.' : 'Showing on the TV.')
+  // TV off = the club's ads (music keeps playing), never a black screen
+  const mode = (state && state.tv && state.tv.mode) || 'blank'
+  if (mode === 'videos') command('tv-hide', {}, 'TV now showing ads.')
+  else command('tv-show', {}, 'Music videos back on the TV.')
 })
+$('tv-blank').addEventListener('click', () => command('tv-blank', {}, 'TV screen blank.'))
 $('bar-toggle').addEventListener('change', () => command('requests-follow-bar', { follow: $('bar-toggle').checked }, $('bar-toggle').checked ? 'Requests now follow the bar.' : 'Requests no longer follow the bar.'))
 $('req-toggle').addEventListener('change', () => command('requests-enabled', { enabled: $('req-toggle').checked }, $('req-toggle').checked ? 'Song requests are on.' : 'Song requests are off.'))
 document.querySelectorAll('[data-pair]').forEach((b) => b.addEventListener('click', () => command('pair', { kind: b.dataset.pair })))
@@ -364,10 +367,12 @@ function timeAgo(ms) {
 let lastDevSig = ''
 function renderTv() {
   const tv = state.tv
+  const mode = tv ? (tv.mode || (tv.visible ? 'videos' : 'blank')) : 'blank'
   $('tv-card').hidden = !tv
-  $('tv-card').classList.toggle('on', Boolean(tv && tv.visible))
-  $('tv-state').textContent = !tv ? '' : tv.visible ? 'On - showing the Jukebox' : 'Off - blank (music still plays)'
-  $('tv-btn').textContent = tv && tv.visible ? 'Turn TV off' : 'Turn TV on'
+  $('tv-card').classList.toggle('on', mode === 'videos')
+  $('tv-state').textContent = !tv ? '' : mode === 'videos' ? 'On - showing the music videos' : mode === 'ads' ? 'Off - showing the club ads (music still plays)' : 'Blank screen (music still plays)'
+  $('tv-btn').textContent = mode === 'videos' ? 'Turn TV off' : 'Turn TV on'
+  $('tv-blank').hidden = !tv || mode === 'blank'
   if (state.player) $('tv-hidden-toggle').checked = Boolean(state.player.tvStartHidden)
 }
 

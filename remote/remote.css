@@ -166,3 +166,5 @@ button,input,select,textarea{font-family:inherit}
 .sg-handled{margin-top:14px}
 .sg-handled summary{cursor:pointer;font-weight:700;color:var(--muted);padding:6px 0}
 .rows .empty{color:var(--muted);padding:10px}
+
+.tv-blank{background:transparent;color:var(--surf-muted,#716B5E);padding:10px 12px;font-weight:700;text-decoration:underline;min-height:44px}

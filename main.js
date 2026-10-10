@@ -208,6 +208,19 @@ function hideDisplayWindow() {
   }
 }
 
+// What the TV shows (Sam, 2026-10-10): 'videos' (normal), 'ads' (an ad
+// slideshow - "Turn TV off" on the Remote, so the TV never sits black while
+// the music plays on) or 'blank' (window hidden, the old "off"). The music
+// carries on in every mode - the Display window is what plays it.
+let tvMode = 'videos'
+function setTvMode(mode) {
+  tvMode = ['videos', 'ads', 'blank'].includes(mode) ? mode : 'videos'
+  if (tvMode === 'blank') return hideDisplayWindow()
+  if (!alive(displayWindow) || !displayWindow.isVisible()) reopenDisplayWindow()
+  sendToDisplay('tv:mode', tvMode)
+}
+ipcMain.handle('tv:get-mode', () => tvMode)
+
 // Normally the Display window is only hidden (its close handler turns a
 // close into a hide), so .show() is enough; if it's genuinely gone it's
 // rebuilt - never a dead end only a restart gets out of (Sam, 2026-09-12).
@@ -347,7 +360,7 @@ ipcMain.on('player:state', (_event, state) => sendToControl('player:state', stat
 
 // Same as the tray's "Show on TV", as a button in Control itself.
 ipcMain.handle('display:reopen', () => {
-  reopenDisplayWindow()
+  setTvMode('videos')
   return true
 })
 
@@ -377,7 +390,8 @@ function refreshTrayMenu() {
   if (!tray) return
   const items = [
     { label: 'Open Control Panel', click: showControl },
-    { label: 'Show on TV', click: reopenDisplayWindow },
+    { label: 'Show on TV', click: () => setTvMode('videos') },
+    { label: 'Show ads on TV', click: () => setTvMode('ads') },
   ]
   if (updateReady) {
     items.push({ type: 'separator' })
@@ -405,9 +419,11 @@ function startRequests() {
       appVersion: app.getVersion(),
       // The Remote's Show on TV / Hide TV
       tv: {
-        visible: () => alive(displayWindow) && displayWindow.isVisible(),
-        show: reopenDisplayWindow,
-        hide: hideDisplayWindow,
+        visible: () => alive(displayWindow) && displayWindow.isVisible() && tvMode === 'videos',
+        mode: () => (alive(displayWindow) && displayWindow.isVisible() ? tvMode : 'blank'),
+        show: () => setTvMode('videos'),
+        hide: () => setTvMode('ads'), // "Turn TV off" = ads, not a black screen
+        blank: () => setTvMode('blank'),
       },
     })
   } catch (err) {
@@ -436,7 +452,9 @@ function startApp() {
   screen.on('display-removed', scheduleRefit)
   library.removeLeftoverTempFiles()
   createControlWindow()
-  createDisplayWindow({ hidden: Boolean(store.getSettings().tvStartHidden) })
+  // "Start with the TV off" now starts on the ad slideshow, not black
+  if (store.getSettings().tvStartHidden) tvMode = 'ads'
+  createDisplayWindow()
   createTray()
   updates.start()
   mediaWatch.start(store.getSettings().mediaFolder)

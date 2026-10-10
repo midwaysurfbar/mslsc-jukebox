@@ -67,3 +67,10 @@ html, body { width: 100%; height: 100%; background: #000; overflow: hidden; curs
 .idle p { font-family: "Shrikhand", Georgia, serif; font-weight: 400; font-size: 11vh; line-height: 1.05; color: #B04A3C; text-shadow: 0.6vh 0.6vh 0 #2E312D; }
 .idle small { font-family: "Barlow Condensed", Barlow, sans-serif; font-weight: 800; font-size: 3.4vh; letter-spacing: .14em; text-transform: uppercase; color: #5A7D62; }
 .idle.hidden { display: none; }
+
+/* TV ad mode: videos hidden (still playing - the music carries on), ads loop */
+.tv-brand { display: none; z-index: 4; }
+body.tv-ads .deck { visibility: hidden; }
+body.tv-ads #idle { display: none; }
+body.tv-ads .ad-overlay { background: #2E312D; }
+body.tv-ads.tv-ads-empty .tv-brand { display: flex; }

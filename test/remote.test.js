@@ -213,6 +213,7 @@ test('Show on TV / Hide TV from a remote', async (t) => {
   assert.equal((await call('/api/remote/state', { token: remote })).data.tv.visible, true)
   await call('/api/remote/command', { token: remote, body: { action: 'tv-hide' } })
   assert.equal(visible, false)
+  assert.equal((await call('/api/remote/state', { token: remote })).data.tv.mode, 'blank')
   // the start-hidden setting is Control's to change - relayed, not handled here
   const r = await call('/api/remote/command', { token: remote, body: { action: 'tv-start-hidden', args: { hidden: true } } })
   assert.equal(r.data.did, 'tv-start-hidden')
@@ -281,4 +282,19 @@ test('Song suggestions: picker sends, rate limit, offline queue, Remote ticks of
   r = await post('/api/remote/command', remote, { action: 'suggestion-status', args: { id: 'a1', status: 'added' } })
   assert.equal(r.data.ok, false)
   assert.equal(calls.length, before)
+})
+
+
+test('TV modes: off = ads, plus a true blank screen', async (t) => {
+  let mode = 'videos'
+  const tv = { visible: () => mode === 'videos', mode: () => mode, show: () => { mode = 'videos' }, hide: () => { mode = 'ads' }, blank: () => { mode = 'blank' } }
+  const fake = start(t, { tv })
+  const remote = await pair(fake, 'remote')
+  const cmd = (action) => call('/api/remote/command', { token: remote, body: { action } })
+  await cmd('tv-hide')
+  assert.equal((await call('/api/remote/state', { token: remote })).data.tv.mode, 'ads')
+  await cmd('tv-blank')
+  assert.equal(mode, 'blank')
+  await cmd('tv-show')
+  assert.equal((await call('/api/remote/state', { token: remote })).data.tv.mode, 'videos')
 })
