@@ -43,3 +43,10 @@ test('file URLs: Windows drive letter kept, every segment encoded', () => {
   assert.equal(toFileUrl('D:/Music Videos/a b.mp4'), 'file:///D:/Music%20Videos/a%20b.mp4')
   assert.equal(toFileUrl('/home/sam/My Videos/x.mp4'), 'file:///home/sam/My%20Videos/x.mp4')
 })
+
+test('"Artist - Album - NN - Song" keeps just the artist and the song', () => {
+  const { guessArtistTitle } = require('../shared/names')
+  assert.deepEqual(guessArtistTitle('Jive bunny - The Album - 01 - Swing the Mood.mp4'), { artist: 'Jive bunny', title: 'Swing the Mood' })
+  assert.deepEqual(guessArtistTitle('Queen - 01 - Bohemian Rhapsody.mp4'), { artist: 'Queen', title: 'Bohemian Rhapsody' })
+  assert.deepEqual(guessArtistTitle('Matchbox 20 - 3 AM.mp4'), { artist: 'Matchbox 20', title: '3 AM' }) // a number as the title stays
+})

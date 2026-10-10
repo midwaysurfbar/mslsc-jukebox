@@ -54,6 +54,11 @@
 
     let parts = name.split(/\s+[-–—]+\s*|\s*[-–—]+\s+|\s*-{2,}\s*/).map(tidy).filter(Boolean)
     if (parts.length >= 3 && parts[0].toLowerCase() === parts[1].toLowerCase()) parts.splice(1, 1)
+    // "Jive Bunny - The Album - 01 - Swing the Mood" (Sam, 2026-10-10): a
+    // track number standing on its own between dashes means "Artist - Album
+    // - NN - Song" - keep the artist and what comes after the number.
+    const trackAt = parts.findIndex((p, i) => i > 0 && i < parts.length - 1 && /^\d{1,3}$/.test(p))
+    if (trackAt > 0) parts = [parts[0], ...parts.slice(trackAt + 1)]
     let artist = parts.length >= 2 ? parts[0] : ''
     let title = parts.length >= 2 ? parts.slice(1).join(' - ') : (parts[0] || tidy(name))
 
