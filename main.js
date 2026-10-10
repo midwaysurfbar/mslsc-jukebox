@@ -16,6 +16,7 @@ const { createConverter } = require('./lib/convert')
 const { createMetadata } = require('./lib/metadata')
 const { createWebAds } = require('./lib/web-ads')
 const { createMediaWatch } = require('./lib/media-watch')
+const { createInboxSorter } = require('./lib/inbox-sorter')
 const { createUpdates } = require('./lib/updates')
 
 // Deck videos play unmuted (to the venue's Bluetooth sound system), so
@@ -53,7 +54,21 @@ const webAds = createWebAds({ store })
 const mediaWatch = createMediaWatch(() => {
   if (requests) requests.invalidateLibrary()
   sendToControl('media-folder:changed')
+  inboxSorter.run().catch(() => {})
 })
+// Videos synced into "New Suggestions" from the laptops get sorted into their
+// decade folder by themselves once they've fully arrived (Sam, 2026-10-10).
+// Checked on every media-folder change, and every 15 s while they settle.
+const inboxSorter = createInboxSorter({
+  store,
+  library,
+  metadata,
+  onMoved: () => {
+    if (requests) requests.invalidateLibrary()
+    sendToControl('media-folder:changed')
+  },
+})
+setInterval(() => { inboxSorter.run().catch(() => {}) }, 15 * 1000)
 
 // --- Windows ---
 

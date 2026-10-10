@@ -191,3 +191,39 @@ test('song picker list: playable songs only, named from tags or the filename, re
   assert.equal(scans, 1, 'built from the last scan, no second walk')
   assert.deepEqual(list.map((s) => [s.t, s.a, s.d]), [['Radio Ga Ga', 'Queen', '1980s'], ['Wonderwall', 'Oasis', '1990s']])
 })
+
+test('New Suggestions inbox: sorted into its decade once fully arrived, unknowns to the main folder, inbox left empty', async (t) => {
+  const { createInboxSorter } = require('../lib/inbox-sorter')
+  const { store, library, media } = setup(t, {
+    'New Suggestions/Oasis - Wonderwall.mp4': 'wonder',
+    'New Suggestions/Mystery Band - Unknown.mp4': 'mystery',
+    'New Suggestions/Still Coming - Song.mp4': 'part',
+    'New Suggestions/.syncthing.Still Coming - Song.mp4.tmp': 'x',
+    'New Suggestions/notes.txt': 'not a video',
+  })
+  const lookups = { 'Oasis - Wonderwall.mp4': { decade: '1990s', confidence: 'high' }, 'Mystery Band - Unknown.mp4': { decade: 'Unknown', confidence: 'none' } }
+  let clock = 1000
+  let movedCalls = 0
+  const sorter = createInboxSorter({
+    store, library, now: () => clock, onMoved: () => { movedCalls += 1 },
+    metadata: { lookup: async (_key, name) => lookups[name] || { decade: 'Unknown', confidence: 'none' } },
+  })
+  const inbox = path.join(media, 'New Suggestions')
+  assert.equal(await sorter.run(), 0) // first sight - waits to see the size settle
+  clock += 5000
+  assert.equal(await sorter.run(), 0) // not settled long enough yet
+  clock += 20000
+  assert.equal(await sorter.run(), 2)
+  assert.equal(movedCalls, 1)
+  assert.ok(fs.existsSync(path.join(media, '1990s', 'Oasis - Wonderwall.mp4')))
+  assert.ok(fs.existsSync(path.join(media, 'Mystery Band - Unknown.mp4')))
+  assert.ok(fs.existsSync(path.join(inbox, 'Still Coming - Song.mp4'))) // Syncthing still copying it
+  assert.ok(fs.existsSync(path.join(inbox, 'notes.txt'))) // not a video - left alone
+
+  // offline lookups wait for the next pass instead of dumping it unsorted
+  fs.rmSync(path.join(inbox, '.syncthing.Still Coming - Song.mp4.tmp'))
+  const offline = createInboxSorter({ store, library, now: () => clock, metadata: { lookup: async () => ({ decade: 'Unknown', confidence: 'none', offline: true }) } })
+  await offline.run(); clock += 30000
+  assert.equal(await offline.run(), 0)
+  assert.ok(fs.existsSync(path.join(inbox, 'Still Coming - Song.mp4')))
+})
