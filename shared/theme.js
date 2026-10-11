@@ -2,7 +2,7 @@
    The same file goes in every club system. It reads the club's active theme
    (the public-theme function), applies it as CSS variables on <html>, and
    checks again every minute - so a theme picked in the Theme Manager
-   reaches every screen within about a minute, with no restart.
+   reaches every screen within 10 minutes, with no restart.
    The last theme is kept in this browser, so a screen with no internet
    still shows it; with nothing kept and no internet, the system's own
    built-in colours (the var() fallbacks in its CSS) show instead.
@@ -17,7 +17,7 @@
   var URL = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/public-theme'
   var KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon key
   var STORE = 'mslsc-theme'
-  var CHECK_MS = 60 * 1000
+  var CHECK_MS = 10 * 60 * 1000 // every 10 minutes - keeps Supabase calls low (Sam 2026-10-11)
   var root = document.documentElement
   var current = ''
 
