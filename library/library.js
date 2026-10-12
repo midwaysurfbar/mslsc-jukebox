@@ -767,6 +767,70 @@ async function loadHistory() {
   if (!data.history.length) box.append(el('li', { class: 'empty', text: 'No changes yet.' }))
 }
 
+
+// ---------------------------------------------------------------- singers from the video files
+let tagTimer = null
+let tagFound = []
+$('tags-open').addEventListener('click', async () => {
+  $('tags-card').hidden = false
+  const r = await api('/api/lib/tags', { method: 'POST', body: JSON.stringify({ action: 'start' }) })
+  if (!r.ok) { toast(r.error, { bad: true }); return }
+  showTags(r.tags)
+})
+$('tags-close').addEventListener('click', () => { $('tags-card').hidden = true; clearTimeout(tagTimer) })
+$('tags-all').addEventListener('click', () => {
+  const boxes = [...document.querySelectorAll('#tags-list input[type=checkbox]')]
+  const on = !boxes.every((b) => b.checked)
+  boxes.forEach((b) => { b.checked = on })
+  countTicked()
+})
+function countTicked() {
+  const n = document.querySelectorAll('#tags-list input[type=checkbox]:checked').length
+  $('tags-apply').textContent = `Fill in ${plural(n, 'song')}`
+  $('tags-apply').disabled = !n
+}
+async function pollTags() {
+  const r = await api('/api/lib/tags')
+  if (r.ok) showTags(r.tags)
+}
+function showTags(st) {
+  clearTimeout(tagTimer)
+  const reading = st.state === 'reading'
+  $('tags-meter-box').hidden = !reading
+  $('tags-meter').style.width = st.total ? `${Math.round((st.done / st.total) * 100)}%` : '0'
+  if (reading) {
+    $('tags-line').textContent = `Reading ${st.done.toLocaleString()} of ${st.total.toLocaleString()} videos… found ${st.count.toLocaleString()} so far`
+    $('tags-list').replaceChildren(); $('tags-apply').hidden = true; $('tags-all').hidden = true
+    tagTimer = setTimeout(pollTags, 2500)
+    return
+  }
+  tagFound = st.found || []
+  $('tags-line').textContent = tagFound.length
+    ? `Found a singer or band for ${plural(tagFound.length, 'song')}. Untick any that look wrong, or fix the name, then press Fill in.`
+    : 'No singers or bands found in the video files - the rest need typing in by hand.'
+  $('tags-list').replaceChildren(...tagFound.map((x) => {
+    const box = el('input', { type: 'checkbox', checked: true, 'data-k': x.k, 'aria-label': `Use for ${x.t}` })
+    box.addEventListener('change', countTicked)
+    const name = el('input', { type: 'text', value: x.artist, maxLength: 120, 'aria-label': `Singer or band for ${x.t}` })
+    return el('label', { class: 'tag-row' }, box,
+      el('span', { class: 'song-n' }, x.t, el('small', { text: x.now ? `now: ${x.now} (guess)` : folderLabel(x.folder) })),
+      name)
+  }))
+  $('tags-apply').hidden = !tagFound.length
+  $('tags-all').hidden = !tagFound.length
+  countTicked()
+}
+$('tags-apply').addEventListener('click', async () => {
+  const items = [...document.querySelectorAll('#tags-list .tag-row')]
+    .filter((row) => row.querySelector('input[type=checkbox]').checked)
+    .map((row) => ({ k: row.querySelector('input[type=checkbox]').dataset.k, artist: row.querySelector('input[type=text]').value }))
+  if (!items.length) return
+  $('tags-apply').disabled = true
+  const r = await act('/api/lib/tags', { action: 'apply', items })
+  $('tags-apply').disabled = false
+  if (r) pollTags()
+})
+
 // ---------------------------------------------------------------- refresh
 async function refreshAfterChange() {
   await loadSongs()

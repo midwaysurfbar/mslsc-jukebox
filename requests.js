@@ -420,6 +420,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       if (url.pathname === '/api/lib/playlists') return reply(async () => ({ ok: true, playlists: m.playlists() }))
       if (url.pathname === '/api/lib/history') return reply(async () => ({ ok: true, history: m.history() }))
       if (url.pathname === '/api/lib/sort') return reply(async () => ({ ok: true, sort: m.sortStatus() }))
+      if (url.pathname === '/api/lib/tags') return reply(async () => ({ ok: true, tags: m.tagStatus() }))
       return send(res, 404, { ok: false, error: 'Not found' })
     }
     if (req.method !== 'POST') return send(res, 404, { ok: false, error: 'Not found' })
@@ -439,6 +440,10 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
         if (body.action === 'stop') return reply(async () => ({ ok: true, sort: m.stopSort() }))
         if (body.action === 'apply') return reply(() => m.applySort(by))
         return send(res, 400, { ok: false, error: 'Unknown sort action.' })
+      case '/api/lib/tags':
+        if (body.action === 'start') return reply(async () => ({ ok: true, tags: await m.startTagScan() }))
+        if (body.action === 'apply') return reply(() => m.applyTags(body.items, by))
+        return send(res, 400, { ok: false, error: 'Unknown action.' })
       default: return send(res, 404, { ok: false, error: 'Not found' })
     }
   }

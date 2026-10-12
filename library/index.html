@@ -60,6 +60,19 @@
         <option value="queued">In the queue now</option>
       </select>
     </div>
+    <div class="actions"><button class="secondary" id="tags-open" type="button">Find singers in the video files</button></div>
+    <div class="intro-card" id="tags-card" hidden>
+      <h2>Singers and bands saved inside the video files</h2>
+      <p class="note">Many videos have the singer or band saved inside the file even when the file name is just the song. This reads them for every song with no singer (or only a guess), so you can check them and fill them in. File names don't change.</p>
+      <p id="tags-line"></p>
+      <div class="meter" id="tags-meter-box"><div id="tags-meter"></div></div>
+      <div id="tags-list" class="tags-list"></div>
+      <div class="actions">
+        <button class="primary" id="tags-apply" type="button" hidden></button>
+        <button class="secondary" id="tags-all" type="button" hidden>Tick all</button>
+        <button class="link" id="tags-close" type="button">Close</button>
+      </div>
+    </div>
     <p class="result-line" id="result-line"></p>
     <div class="bulk" id="bulk" hidden>
       <b id="bulk-count"></b>

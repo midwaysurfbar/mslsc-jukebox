@@ -272,3 +272,23 @@ test('sort into decades: looks songs up, then moves them all at once (undoable);
   await manager.undo(manager.history()[0].id)
   assert.ok(fs.existsSync(path.join(media, 'Old', 'Boney M. - Sunny.mp4')))
 })
+
+test('singers read from the video files fill in songs with no singer, and can be undone', async (t) => {
+  const env = setup(t, { 'Love Story.mp4': 'a', 'Maniac.mp4': 'bb', 'Abba - Waterloo.mp4': 'ccc', 'Named.mp4': 'dddd' })
+  const tags = { 'Love Story.mp4': '    title           : Love Story\n    artist          : Taylor Swift \n', 'Maniac.mp4': '    title           : Maniac\n', 'Abba - Waterloo.mp4': '    artist          : ABBA\n', 'Named.mp4': '    artist          : Someone\n' }
+  const execFile = (_bin, args, _opts, cb) => setImmediate(() => cb(null, '', tags[path.basename(args[2])] || ''))
+  const k = (rel) => fileKey(path.join(env.media, rel), fs.statSync(path.join(env.media, rel)).size)
+  env.store.writeJson(env.store.paths.metadata, { [k('Named.mp4')]: { artist: 'Typed By Sam', confidence: 'manual', title: 'Named' } })
+  const manager = createLibraryManager({ store: env.store, library: env.library, ffmpegPath: '/bin/ffmpeg', execFile, onChanged: () => {} })
+  await manager.startTagScan()
+  for (let i = 0; i < 50 && manager.tagStatus().state === 'reading'; i++) await new Promise((r) => setTimeout(r, 5))
+  const st = manager.tagStatus()
+  assert.equal(st.total, 2) // only Love Story + Maniac: Waterloo has a singer in its name, Named was typed by Sam
+  assert.deepEqual(st.found.map((x) => [x.f, x.artist]), [['Love Story.mp4', 'Taylor Swift']])
+  await manager.applyTags([{ k: st.found[0].k, artist: 'Taylor Swift' }], 'Laptop')
+  const row = (await manager.list()).find((x) => x.f === 'Love Story.mp4')
+  assert.equal(row.a, 'Taylor Swift')
+  assert.equal(env.store.getMetadata()[k('Love Story.mp4')].confidence, 'high')
+  await manager.undo(manager.history()[0].id)
+  assert.equal((await manager.list()).find((x) => x.f === 'Love Story.mp4').a, '')
+})

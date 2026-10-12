@@ -242,3 +242,11 @@ h1,.wordmark,.pair-card h1,.top h1{color:var(--t-accent-2,#FF2E97);text-shadow:0
 
 /* THEMEVARS-DONE: colours follow the club theme (theme.js); the neon values are the fallbacks */
 html[data-theme-glow=off] h1,html[data-theme-glow=off] .wordmark{text-shadow:none}
+
+/* singers from the video files */
+.tags-list{display:grid;gap:4px;max-height:420px;overflow:auto;margin:6px 0}
+.tag-row{display:grid;grid-template-columns:24px minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding:4px 6px;border-radius:8px}
+.tag-row:hover{background:var(--t-bg-2,#0B0620)}
+.tag-row .song-n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag-row .song-n small{color:var(--muted);margin-left:6px}
+.tag-row input[type=text]{min-height:34px;padding:5px 9px}
