@@ -451,6 +451,7 @@ jukebox.onSeek((seconds) => {
 jukebox.onSetCrossfadeDuration((seconds) => { crossfadeSeconds = seconds; setDeckTransitionDuration(seconds) })
 jukebox.onSetVolume((v) => { volume = v; if (!isTransitioning) activeDeck.volume = v })
 jukebox.onSettingsUpdated((settings) => {
+  applyScene(settings)
   crossfadeSeconds = settings.crossfadeSeconds
   volume = settings.volume
   setDeckTransitionDuration(crossfadeSeconds)
@@ -462,6 +463,7 @@ jukebox.onSettingsUpdated((settings) => {
 })
 
 jukebox.getSettings().then((settings) => {
+  applyScene(settings)
   crossfadeSeconds = settings.crossfadeSeconds
   volume = settings.volume
   setDeckTransitionDuration(crossfadeSeconds)
@@ -505,8 +507,41 @@ async function runAdLoop() {
 function applyTvMode(mode) {
   tvMode = mode === 'ads' ? 'ads' : 'videos'
   document.body.classList.toggle('tv-ads', tvMode === 'ads')
+  syncScenePlayback()
   if (tvMode === 'ads') runAdLoop()
   else if (!adBreakInProgress) adOverlay.classList.remove('active')
 }
 jukebox.onTvMode(applyTvMode)
 jukebox.getTvMode().then(applyTvMode).catch(() => {})
+
+
+// ---- TV scene (Sam, 2026-10-15) --------------------------------------------
+// A looping fireplace or beach sunset from the Remote: 'split' puts it beside
+// the music video, 'full' fills the TV with it (the music video keeps playing
+// underneath, so the music carries on). 'off' = the music video full screen.
+// The loop only plays while it's on screen, to spare the venue PC.
+const sceneDeck = document.getElementById('sceneDeck')
+let sceneMode = 'off'
+let sceneName = ''
+async function applyScene(settings) {
+  const mode = ['split', 'full'].includes(settings.tvSceneMode) ? settings.tvSceneMode : 'off'
+  const name = settings.tvScene === 'beach' ? 'beach' : 'fireplace'
+  if (mode !== 'off' && name !== sceneName) {
+    const file = await jukebox.getScenePath(name)
+    if (!file) { console.warn('[scene] missing file for', name); return }
+    sceneName = name
+    sceneDeck.src = toFileUrl(file)
+  }
+  sceneMode = mode
+  document.body.classList.toggle('scene-split', mode === 'split')
+  document.body.classList.toggle('scene-full', mode === 'full')
+  syncScenePlayback()
+}
+function syncScenePlayback() {
+  if (sceneMode !== 'off' && tvMode !== 'ads') {
+    if (sceneDeck.src && sceneDeck.paused) sceneDeck.play().catch(() => {})
+  } else if (!sceneDeck.paused) {
+    // pause once it's faded out
+    setTimeout(() => { if (sceneMode === 'off' || tvMode === 'ads') sceneDeck.pause() }, 1300)
+  }
+}

@@ -389,6 +389,13 @@ ipcMain.handle('ads-folder:list', () => {
   return { files: files.map((f) => ({ ...f, ...adSettings[f.filename] })) }
 })
 ipcMain.handle('web-ads:sync', () => webAds.sync())
+// The TV scene loops live in the data folder, not the song library, so they
+// never turn up as songs.
+const SCENE_FILES = { fireplace: 'fireplace.mp4', beach: 'beach-sunset.mp4' }
+ipcMain.handle('scene:get-path', (_event, scene) => {
+  const file = SCENE_FILES[scene] && path.join(paths.scenes, SCENE_FILES[scene])
+  return file && fs.existsSync(file) ? file : null
+})
 
 // --- IPC: player relay between the two windows ---
 

@@ -83,7 +83,7 @@ const BAR_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon 
 const BAR_CHECK_MS = 30000
 // Commands the main process answers itself; everything else goes to Control.
 const REMOTE_COMMANDS = new Set([
-  'toggle', 'skip', 'previous', 'seek', 'volume', 'tv-start-hidden',
+  'toggle', 'skip', 'previous', 'seek', 'volume', 'tv-start-hidden', 'tv-scene',
   'add', 'next', 'move', 'remove', 'play-from', 'shuffle', 'clear',
   'playlist-play', 'playlist-queue',
 ])
