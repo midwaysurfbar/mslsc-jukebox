@@ -87,7 +87,7 @@ body.scene-both .scene-deck2 { display: block; }
 body.scene-split.scene-both .scene-deck { height: 50%; }
 body.scene-split.scene-both .scene-deck2 { top: 50%; height: 50%; }
 body.scene-full.scene-both .scene-deck { right: auto; left: 0; width: 50%; }
-body.scene-full.scene-both .scene-deck2 { width: 50%; }
+body.scene-full.scene-both .scene-deck2 { left: auto; right: 0; width: 50%; }
 body.scene-full .intro-deck { visibility: hidden; }
 body.tv-ads .scene-deck { visibility: hidden; }
 
