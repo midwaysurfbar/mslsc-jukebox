@@ -354,7 +354,7 @@ $('tv-btn').addEventListener('click', () => {
   else command('tv-show', {}, 'Music videos back on the TV.')
 })
 $('tv-blank').addEventListener('click', () => command('tv-blank', {}, 'TV screen blank.'))
-const SCENE_NAMES = { fireplace: 'fireplace', beach: 'beach sunset' }
+const SCENE_NAMES = { fireplace: 'fireplace', beach: 'beach sunset', both: 'fireplace and beach sunset' }
 $('scene-pick').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-scene]')
   if (b) command('tv-scene', { scene: b.dataset.scene }, `TV scene: ${SCENE_NAMES[b.dataset.scene]}.`)

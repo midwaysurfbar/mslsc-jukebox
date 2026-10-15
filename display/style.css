@@ -81,6 +81,13 @@ body.tv-ads.tv-ads-empty .tv-brand { display: flex; }
 body.scene-split .scene-deck, body.scene-full .scene-deck { opacity: 1; }
 body.scene-split .deck, body.scene-split #idle { width: 50%; }
 body.scene-full .scene-deck { width: 100%; }
+/* both together: stacked beside the music video, or left/right full screen */
+.scene-deck2 { display: none; }
+body.scene-both .scene-deck2 { display: block; }
+body.scene-split.scene-both .scene-deck { height: 50%; }
+body.scene-split.scene-both .scene-deck2 { top: 50%; height: 50%; }
+body.scene-full.scene-both .scene-deck { right: auto; left: 0; width: 50%; }
+body.scene-full.scene-both .scene-deck2 { width: 50%; }
 body.scene-full .intro-deck { visibility: hidden; }
 body.tv-ads .scene-deck { visibility: hidden; }
 

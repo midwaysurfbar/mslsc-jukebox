@@ -521,27 +521,35 @@ jukebox.getTvMode().then(applyTvMode).catch(() => {})
 // underneath, so the music carries on). 'off' = the music video full screen.
 // The loop only plays while it's on screen, to spare the venue PC.
 const sceneDeck = document.getElementById('sceneDeck')
+const sceneDeck2 = document.getElementById('sceneDeck2')
 let sceneMode = 'off'
 let sceneName = ''
+// 'both' (Sam, 2026-10-16) shows the fireplace and the beach sunset together:
+// one above the other beside the music video, or left/right when full screen.
 async function applyScene(settings) {
   const mode = ['split', 'full'].includes(settings.tvSceneMode) ? settings.tvSceneMode : 'off'
-  const name = settings.tvScene === 'beach' ? 'beach' : 'fireplace'
+  const name = ['beach', 'both'].includes(settings.tvScene) ? settings.tvScene : 'fireplace'
   if (mode !== 'off' && name !== sceneName) {
-    const file = await jukebox.getScenePath(name)
-    if (!file) { console.warn('[scene] missing file for', name); return }
+    const first = await jukebox.getScenePath(name === 'beach' ? 'beach' : 'fireplace')
+    const second = name === 'both' ? await jukebox.getScenePath('beach') : ''
+    if (!first || (name === 'both' && !second)) { console.warn('[scene] missing file for', name); return }
     sceneName = name
-    sceneDeck.src = toFileUrl(file)
+    sceneDeck.src = toFileUrl(first)
+    if (second) sceneDeck2.src = toFileUrl(second)
+    else sceneDeck2.removeAttribute('src')
   }
   sceneMode = mode
   document.body.classList.toggle('scene-split', mode === 'split')
   document.body.classList.toggle('scene-full', mode === 'full')
+  document.body.classList.toggle('scene-both', name === 'both')
   syncScenePlayback()
 }
 function syncScenePlayback() {
+  const decks = [sceneDeck, sceneDeck2]
   if (sceneMode !== 'off' && tvMode !== 'ads') {
-    if (sceneDeck.src && sceneDeck.paused) sceneDeck.play().catch(() => {})
-  } else if (!sceneDeck.paused) {
+    for (const d of decks) if (d.getAttribute('src') && d.paused) d.play().catch(() => {})
+  } else if (decks.some((d) => !d.paused)) {
     // pause once it's faded out
-    setTimeout(() => { if (sceneMode === 'off' || tvMode === 'ads') sceneDeck.pause() }, 1300)
+    setTimeout(() => { if (sceneMode === 'off' || tvMode === 'ads') for (const d of decks) d.pause() }, 1300)
   }
 }

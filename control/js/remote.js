@@ -38,7 +38,7 @@ function pushRemoteStatus() {
     duration: st ? st.duration || 0 : 0,
     volume: settings.volume,
     tvStartHidden: Boolean(settings.tvStartHidden),
-    tvScene: settings.tvScene === 'beach' ? 'beach' : 'fireplace',
+    tvScene: ['beach', 'both'].includes(settings.tvScene) ? settings.tvScene : 'fireplace',
     tvSceneMode: ['split', 'full'].includes(settings.tvSceneMode) ? settings.tvSceneMode : 'off',
     upcoming: rows,
     upcomingTotal: Math.max(0, queue.tracks.length - from),
@@ -89,7 +89,7 @@ const remoteActions = {
   },
   // The fireplace / beach sunset on the TV (Sam, 2026-10-15)
   async 'tv-scene'({ scene, mode }) {
-    if (scene !== undefined) settings.tvScene = scene === 'beach' ? 'beach' : 'fireplace'
+    if (scene !== undefined) settings.tvScene = ['beach', 'both'].includes(scene) ? scene : 'fireplace'
     if (mode !== undefined) settings.tvSceneMode = ['split', 'full'].includes(mode) ? mode : 'off'
     await jukebox.saveSettings(settings)
     pushRemoteStatus()
