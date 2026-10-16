@@ -75,22 +75,6 @@ body.tv-ads #idle { display: none; }
 body.tv-ads .ad-overlay { background: var(--t-card,#2E312D); }
 body.tv-ads.tv-ads-empty .tv-brand { display: flex; }
 
-/* TV scene (Sam, 2026-10-15): a fireplace or beach sunset, side by side with
-   the music video or full screen. Ads still cover the whole TV. */
-.scene-deck { position: absolute; top: 0; right: 0; width: 50%; height: 100%; object-fit: cover; background: #000; z-index: 1; opacity: 0; transition: opacity 1.2s ease; pointer-events: none; }
-body.scene-split .scene-deck, body.scene-full .scene-deck { opacity: 1; }
-body.scene-split .deck, body.scene-split #idle { width: 50%; }
-body.scene-full .scene-deck { width: 100%; }
-/* both together: stacked beside the music video, or left/right full screen */
-.scene-deck2 { display: none; }
-body.scene-both .scene-deck2 { display: block; }
-body.scene-split.scene-both .scene-deck { height: 50%; }
-body.scene-split.scene-both .scene-deck2 { top: 50%; height: 50%; }
-body.scene-full.scene-both .scene-deck { right: auto; left: 0; width: 50%; }
-body.scene-full.scene-both .scene-deck2 { left: auto; right: 0; width: 50%; }
-body.scene-full .intro-deck { visibility: hidden; }
-body.tv-ads .scene-deck { visibility: hidden; }
-
 /* ==== Full 80s neon (Sam, 2026-10-11: "option b") ==== */
 .idle { background: var(--t-bg,#120A2A); color: var(--t-text,#F3E9FF); }
 .idle::before { background: repeating-conic-gradient(from 0deg at 50% 50%, color-mix(in srgb,var(--t-accent-2,#FF2E97) 13%,transparent) 0 6deg, transparent 6deg 12deg); }

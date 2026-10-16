@@ -451,7 +451,6 @@ jukebox.onSeek((seconds) => {
 jukebox.onSetCrossfadeDuration((seconds) => { crossfadeSeconds = seconds; setDeckTransitionDuration(seconds) })
 jukebox.onSetVolume((v) => { volume = v; if (!isTransitioning) activeDeck.volume = v })
 jukebox.onSettingsUpdated((settings) => {
-  applyScene(settings)
   crossfadeSeconds = settings.crossfadeSeconds
   volume = settings.volume
   setDeckTransitionDuration(crossfadeSeconds)
@@ -463,7 +462,6 @@ jukebox.onSettingsUpdated((settings) => {
 })
 
 jukebox.getSettings().then((settings) => {
-  applyScene(settings)
   crossfadeSeconds = settings.crossfadeSeconds
   volume = settings.volume
   setDeckTransitionDuration(crossfadeSeconds)
@@ -507,49 +505,8 @@ async function runAdLoop() {
 function applyTvMode(mode) {
   tvMode = mode === 'ads' ? 'ads' : 'videos'
   document.body.classList.toggle('tv-ads', tvMode === 'ads')
-  syncScenePlayback()
   if (tvMode === 'ads') runAdLoop()
   else if (!adBreakInProgress) adOverlay.classList.remove('active')
 }
 jukebox.onTvMode(applyTvMode)
 jukebox.getTvMode().then(applyTvMode).catch(() => {})
-
-
-// ---- TV scene (Sam, 2026-10-15) --------------------------------------------
-// A looping fireplace or beach sunset from the Remote: 'split' puts it beside
-// the music video, 'full' fills the TV with it (the music video keeps playing
-// underneath, so the music carries on). 'off' = the music video full screen.
-// The loop only plays while it's on screen, to spare the venue PC.
-const sceneDeck = document.getElementById('sceneDeck')
-const sceneDeck2 = document.getElementById('sceneDeck2')
-let sceneMode = 'off'
-let sceneName = ''
-// 'both' (Sam, 2026-10-16) shows the fireplace and the beach sunset together:
-// one above the other beside the music video, or left/right when full screen.
-async function applyScene(settings) {
-  const mode = ['split', 'full'].includes(settings.tvSceneMode) ? settings.tvSceneMode : 'off'
-  const name = ['beach', 'both'].includes(settings.tvScene) ? settings.tvScene : 'fireplace'
-  if (mode !== 'off' && name !== sceneName) {
-    const first = await jukebox.getScenePath(name === 'beach' ? 'beach' : 'fireplace')
-    const second = name === 'both' ? await jukebox.getScenePath('beach') : ''
-    if (!first || (name === 'both' && !second)) { console.warn('[scene] missing file for', name); return }
-    sceneName = name
-    sceneDeck.src = toFileUrl(first)
-    if (second) sceneDeck2.src = toFileUrl(second)
-    else sceneDeck2.removeAttribute('src')
-  }
-  sceneMode = mode
-  document.body.classList.toggle('scene-split', mode === 'split')
-  document.body.classList.toggle('scene-full', mode === 'full')
-  document.body.classList.toggle('scene-both', name === 'both')
-  syncScenePlayback()
-}
-function syncScenePlayback() {
-  const decks = [sceneDeck, sceneDeck2]
-  if (sceneMode !== 'off' && tvMode !== 'ads') {
-    for (const d of decks) if (d.getAttribute('src') && d.paused) d.play().catch(() => {})
-  } else if (decks.some((d) => !d.paused)) {
-    // pause once it's faded out
-    setTimeout(() => { if (sceneMode === 'off' || tvMode === 'ads') for (const d of decks) d.pause() }, 1300)
-  }
-}

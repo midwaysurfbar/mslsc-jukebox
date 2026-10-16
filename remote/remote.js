@@ -407,17 +407,6 @@ $('tv-btn').addEventListener('click', () => {
   else command('tv-show', {}, 'Music videos back on the TV.')
 })
 $('tv-blank').addEventListener('click', () => command('tv-blank', {}, 'TV screen blank.'))
-const SCENE_NAMES = { fireplace: 'fireplace', beach: 'beach sunset', both: 'fireplace and beach sunset' }
-$('scene-pick').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-scene]')
-  if (b) command('tv-scene', { scene: b.dataset.scene }, `TV scene: ${SCENE_NAMES[b.dataset.scene]}.`)
-})
-$('scene-mode').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-mode]')
-  if (!b) return
-  const name = SCENE_NAMES[(state.player && state.player.tvScene) || 'fireplace']
-  command('tv-scene', { mode: b.dataset.mode }, b.dataset.mode === 'off' ? 'Music video back to full screen.' : b.dataset.mode === 'split' ? `Music video and ${name} side by side.` : `${name[0].toUpperCase() + name.slice(1)} full screen - music still plays.`)
-})
 $('bar-toggle').addEventListener('change', () => command('requests-follow-bar', { follow: $('bar-toggle').checked }, $('bar-toggle').checked ? 'Requests now follow the bar.' : 'Requests no longer follow the bar.'))
 $('req-toggle').addEventListener('change', () => command('requests-enabled', { enabled: $('req-toggle').checked }, $('req-toggle').checked ? 'Song requests are on.' : 'Song requests are off.'))
 document.querySelectorAll('[data-pair]').forEach((b) => b.addEventListener('click', () => command('pair', { kind: b.dataset.pair })))
@@ -440,9 +429,6 @@ function renderTv() {
   $('tv-btn').textContent = mode === 'videos' ? 'Turn TV off' : 'Turn TV on'
   $('tv-blank').hidden = !tv || mode === 'blank'
   if (state.player) $('tv-hidden-toggle').checked = Boolean(state.player.tvStartHidden)
-  const p = state.player || {}
-  document.querySelectorAll('#scene-pick button').forEach((b) => b.classList.toggle('on', b.dataset.scene === (p.tvScene || 'fireplace')))
-  document.querySelectorAll('#scene-mode button').forEach((b) => b.classList.toggle('on', b.dataset.mode === (p.tvSceneMode || 'off')))
 }
 
 function renderScreens() {
