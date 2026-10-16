@@ -186,6 +186,7 @@ button,input,select,textarea{font-family:inherit}
 body{background:var(--ground,var(--sand));color:var(--ink);color-scheme:dark}
 input,select{background:var(--t-bg-2,#0B0620);color:var(--ink)}
 .secondary{color:var(--ink)}
+.row:nth-child(odd){background:color-mix(in srgb,var(--ink) 8%,transparent)}
 h1,.wordmark,.pair-card h1,.top h1{color:var(--t-accent-2,#FF2E97);text-shadow:0 0 6px var(--t-accent-2,#FF2E97),0 0 20px color-mix(in srgb,var(--t-accent-2,#FF2E97) 53%,transparent)}
 .pill.ok{background:var(--t-card,#0F3D4D);color:var(--t-text,#9FF3FF)}
 .pill.bad{background:var(--t-card,#43102C);color:var(--t-muted,#FF8CC4)}
