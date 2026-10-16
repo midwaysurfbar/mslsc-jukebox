@@ -389,6 +389,19 @@ ipcMain.handle('ads-folder:list', () => {
   return { files: files.map((f) => ({ ...f, ...adSettings[f.filename] })) }
 })
 ipcMain.handle('web-ads:sync', () => webAds.sync())
+// Playback health from the TV window (frames shown / dropped per 10 s) - see display/app.js.
+const VIDEO_STATS_LOG = path.join(app.getPath('userData'), 'playback-stats.log')
+ipcMain.on('diag:video-stats', (_event, row) => {
+  try {
+    if (!row || typeof row !== 'object') return
+    const n = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+    const line = `${new Date().toISOString()} secs=${n(row.secs)} frames=${n(row.frames)} dropped=${n(row.dropped)} size=${String(row.size || '').slice(0, 12)} file=${String(row.file || '').replace(/[\r\n]/g, ' ').slice(0, 80)}\n`
+    if (fs.existsSync(VIDEO_STATS_LOG) && fs.statSync(VIDEO_STATS_LOG).size > 1024 * 1024) {
+      fs.writeFileSync(VIDEO_STATS_LOG, fs.readFileSync(VIDEO_STATS_LOG, 'utf8').slice(-256 * 1024))
+    }
+    fs.appendFileSync(VIDEO_STATS_LOG, line)
+  } catch { /* diagnostics only */ }
+})
 
 // --- IPC: player relay between the two windows ---
 

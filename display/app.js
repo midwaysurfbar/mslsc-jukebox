@@ -384,6 +384,36 @@ for (const deck of [deckA, deckB]) {
 
 setInterval(() => { if (isPlaying) reportState() }, 1000)
 
+// Playback health (Sam, 2026-10-16: "is it the PC?"). Every 10 s of music video
+// on the TV, note how many frames the player showed and how many it had to
+// drop, and write that to playback-stats.log. Dropped frames here mean the PC
+// couldn't keep up; if this stays at zero and the TV still jumps, the fault is
+// after the PC (cable, wireless HDMI, the TV).
+let statSrc = ''
+let statFrames = 0
+let statDropped = 0
+let statAt = 0
+setInterval(() => {
+  try {
+    if (!isPlaying || tvMode !== 'videos' || document.hidden || !activeDeck.currentSrc) { statSrc = ''; return }
+    const q = activeDeck.getVideoPlaybackQuality()
+    const now = performance.now()
+    if (activeDeck.currentSrc === statSrc && statAt) {
+      jukebox.logVideoStats({
+        secs: Math.round((now - statAt) / 100) / 10,
+        frames: q.totalVideoFrames - statFrames,
+        dropped: q.droppedVideoFrames - statDropped,
+        size: `${activeDeck.videoWidth}x${activeDeck.videoHeight}`,
+        file: decodeURIComponent(activeDeck.currentSrc.split('/').pop() || '').slice(0, 80),
+      })
+    }
+    statSrc = activeDeck.currentSrc
+    statFrames = q.totalVideoFrames
+    statDropped = q.droppedVideoFrames
+    statAt = now
+  } catch { /* stats are optional */ }
+}, 10000)
+
 // --- Commands from Control (via main) ---
 
 jukebox.onLoadQueue(({ tracks, startIndex, paused }) => {

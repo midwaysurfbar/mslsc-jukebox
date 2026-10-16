@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('jukebox', {
   listAdImages: () => ipcRenderer.invoke('ads-folder:list'),
   getIntroVideoPath: () => ipcRenderer.invoke('intro-video:get-path'),
   getTvMode: () => ipcRenderer.invoke('tv:get-mode'),
+  logVideoStats: (row) => ipcRenderer.send('diag:video-stats', row),
   onTvMode: (callback) => ipcRenderer.on('tv:mode', (_event, mode) => callback(mode)),
 
   onLoadQueue: (callback) => ipcRenderer.on('player:load-queue', (_event, payload) => callback(payload)),
