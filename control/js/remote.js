@@ -156,6 +156,12 @@ const remoteActions = {
     await playPlaylistNow(id)
     return { ok: true }
   },
+  // The songs inside one playlist, so the Remote can open it and pick from it.
+  async 'playlist-songs'({ id }) {
+    const p = playlists.find((x) => x.id === id)
+    if (!p) return { ok: false, error: 'That playlist is gone.' }
+    return { ok: true, keys: p.trackKeys.slice(0, 5000) }
+  },
   async 'playlist-queue'({ id }) {
     const p = playlists.find((x) => x.id === id)
     if (!p || !p.trackKeys.length) return { ok: false, error: 'That playlist is empty.' }

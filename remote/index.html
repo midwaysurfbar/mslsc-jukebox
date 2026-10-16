@@ -91,6 +91,17 @@
   <section class="panel" id="tab-playlists" hidden>
     <input class="search" id="pl-search" type="search" placeholder="Find a playlist" autocomplete="off">
     <ol class="rows" id="pl-list"></ol>
+    <div id="pl-open" hidden>
+      <div class="panel-actions">
+        <button class="secondary" id="pl-back" type="button">← All playlists</button>
+        <button class="secondary" id="pl-open-play" type="button">Play now</button>
+        <button class="primary" id="pl-open-all" type="button">Add all to queue</button>
+      </div>
+      <h2 id="pl-open-name"></h2>
+      <input class="search" id="pl-open-search" type="search" placeholder="Find a song in this playlist" autocomplete="off">
+      <ol class="rows" id="pl-songs"></ol>
+      <p class="note" id="pl-open-note"></p>
+    </div>
   </section>
 
   <!-- Songs members asked for that aren't in the library (Sam 2026-10-10).

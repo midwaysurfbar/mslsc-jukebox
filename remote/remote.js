@@ -331,7 +331,7 @@ function renderPlaylists(force = false) {
   list.replaceChildren()
   if (!shown.length) list.append(el('li', { class: 'empty', text: all.length ? 'No playlists match that.' : 'No playlists yet.' }))
   shown.forEach((p) => list.append(el('li', { class: 'row' },
-    el('span', { class: 'what' }, el('b', { text: p.name }), el('span', { text: `${p.n} song${p.n === 1 ? '' : 's'}` })),
+    el('button', { class: 'what pl-open-btn', type: 'button', 'data-p': 'open', 'data-id': p.id, 'data-n': p.name, 'aria-label': `Open ${p.name} and pick songs` }, el('b', { text: p.name }), el('span', { text: `${p.n} song${p.n === 1 ? '' : 's'} - tap to pick songs` })),
     el('span', { class: 'acts' },
       el('button', { class: 'secondary', text: 'Play now', 'data-p': 'play', 'data-id': p.id, 'data-n': p.name }),
       el('button', { class: 'primary', text: 'Add to queue', 'data-p': 'queue', 'data-id': p.id, 'data-n': p.name })))))
@@ -340,9 +340,62 @@ $('pl-search').addEventListener('input', () => renderPlaylists())
 $('pl-list').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-p]')
   if (!b) return
-  if (b.dataset.p === 'play') {
+  if (b.dataset.p === 'open') openPlaylist(b.dataset.id, b.dataset.n)
+  else if (b.dataset.p === 'play') {
     if (confirm(`Play "${b.dataset.n}" now? It replaces everything in the queue.`)) command('playlist-play', { id: b.dataset.id }, `Playing ${b.dataset.n}.`)
   } else command('playlist-queue', { id: b.dataset.id }, `${b.dataset.n} added to the queue.`)
+})
+
+// Open one playlist and pick songs from it (Sam, 2026-10-16).
+let plOpen = null // { id, name, keys }
+async function openPlaylist(id, name) {
+  const r = await command('playlist-songs', { id })
+  if (!r || !r.ok) return
+  await loadLibrary()
+  plOpen = { id, name, keys: r.keys || [] }
+  $('pl-search').hidden = true
+  $('pl-list').hidden = true
+  $('pl-open').hidden = false
+  $('pl-open-name').textContent = name
+  $('pl-open-search').value = ''
+  renderPlaylistSongs()
+}
+function closePlaylist() {
+  plOpen = null
+  $('pl-open').hidden = true
+  $('pl-search').hidden = false
+  $('pl-list').hidden = false
+}
+function renderPlaylistSongs() {
+  if (!plOpen) return
+  const byKey = new Map(library.map((s) => [s.k, s]))
+  const q = $('pl-open-search').value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  const songs = plOpen.keys.map((k) => byKey.get(k)).filter(Boolean)
+  const hits = q.length ? songs.filter((s) => { const hay = `${s.t} ${s.a} ${s.d}`.toLowerCase(); return q.every((w) => hay.includes(w)) }) : songs
+  const list = $('pl-songs')
+  list.replaceChildren()
+  hits.slice(0, 100).forEach((s) => list.append(el('li', { class: 'row' },
+    thumb(s, 'thumb'),
+    el('span', { class: 'what' }, el('b', { text: s.t }), el('span', { text: [s.a, s.d].filter(Boolean).join(' · ') })),
+    el('span', { class: 'acts' },
+      el('button', { class: 'secondary', text: 'Play next', 'data-s': 'next', 'data-k': s.k }),
+      el('button', { class: 'primary', text: 'Add', 'data-s': 'add', 'data-k': s.k })))))
+  const missing = plOpen.keys.length - songs.length
+  $('pl-open-note').textContent = !songs.length ? 'No songs from this playlist are available right now.' : !hits.length ? 'No songs match that.' : hits.length > 100 ? `Showing 100 of ${hits.length} - type to narrow it down.` : missing > 0 ? `${missing} song${missing === 1 ? '' : 's'} in this playlist can't be played right now.` : ''
+}
+$('pl-back').addEventListener('click', closePlaylist)
+$('pl-open-search').addEventListener('input', renderPlaylistSongs)
+$('pl-open-all').addEventListener('click', () => plOpen && command('playlist-queue', { id: plOpen.id }, `${plOpen.name} added to the queue.`))
+$('pl-open-play').addEventListener('click', () => {
+  if (plOpen && confirm(`Play "${plOpen.name}" now? It replaces everything in the queue.`)) command('playlist-play', { id: plOpen.id }, `Playing ${plOpen.name}.`)
+})
+$('pl-songs').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-s]')
+  if (!b) return
+  const song = library.find((s) => s.k === b.dataset.k)
+  const name = song ? song.t : 'Song'
+  if (b.dataset.s === 'next') command('next', { key: b.dataset.k }, `${name} plays next.`)
+  else command('add', { key: b.dataset.k }, `${name} added.`)
 })
 
 // ---------------------------------------------------------------- requests & screens

@@ -85,7 +85,7 @@ const BAR_CHECK_MS = 30000
 const REMOTE_COMMANDS = new Set([
   'toggle', 'skip', 'previous', 'seek', 'volume', 'tv-start-hidden', 'tv-scene',
   'add', 'next', 'move', 'remove', 'play-from', 'shuffle', 'clear',
-  'playlist-play', 'playlist-queue',
+  'playlist-play', 'playlist-queue', 'playlist-songs',
 ])
 
 // A Tailscale address (100.64.0.0/10) - how the laptops reach the venue PC.

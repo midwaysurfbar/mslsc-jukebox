@@ -215,3 +215,8 @@ html[data-theme-glow=off] h1,html[data-theme-glow=off] .wordmark{text-shadow:non
 .code-box{background:var(--card);color:var(--ink)}
 .find-yt{color:var(--t-accent2-text,#fff)}
 .secondary{box-shadow:inset 0 0 0 1.5px var(--line)}
+/* a playlist's name is a big tap target that opens it */
+.pl-open-btn{background:transparent;color:var(--ink);text-align:left;padding:4px 6px;border-radius:8px;min-height:44px}
+.pl-open-btn:hover,.pl-open-btn:focus-visible{background:color-mix(in srgb,var(--teal) 12%,transparent)}
+.pl-open-btn b{color:var(--ink)}
+#pl-open h2{margin:10px 0 8px}
