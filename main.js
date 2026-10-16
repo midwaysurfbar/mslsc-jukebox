@@ -24,6 +24,17 @@ const { createLibraryManager } = require('./lib/library-manager')
 // allow autoplay without a gesture.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
+// Hardware video decoding on Linux (Sam, 2026-10-16). Without this the venue
+// PC (Intel HD, VA-API) decoded every frame on the CPU and dropped up to 39%
+// of the frames on 1080p60 videos - the TV "jumped". Windows did this by
+// default; Linux Chromium needs asking. If a PC can't do it, Chromium falls
+// back to software decoding by itself. JUKEBOX_NO_HWDECODE=1 turns it off.
+if (process.platform === 'linux' && !process.env.JUKEBOX_NO_HWDECODE) {
+  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiIgnoreDriverChecks,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL')
+  app.commandLine.appendSwitch('disable-features', 'UseChromeOSDirectVideoDecoder')
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+}
+
 // An uncaught error used to pop Electron's "A JavaScript error occurred"
 // dialog live at the bar (2026-09-12: an EBUSY from a temp-file clean-up).
 // Log it and keep running instead.
@@ -500,6 +511,14 @@ if (!app.requestSingleInstanceLock()) {
 } else {
   app.on('second-instance', showControl)
   app.whenReady().then(startApp)
+  // What the graphics side is really doing (video_decode: enabled / disabled_software)
+  // - written a while after start-up, once the GPU process is up.
+  app.whenReady().then(() => setTimeout(async () => {
+    try {
+      const info = await app.getGPUInfo('basic')
+      fs.writeFileSync(path.join(app.getPath('userData'), 'gpu-status.json'), JSON.stringify({ at: new Date().toISOString(), version: app.getVersion(), features: app.getGPUFeatureStatus(), gl: info.auxAttributes && info.auxAttributes.glRenderer, devices: (info.gpuDevice || []).map((d) => ({ vendor: d.vendorId, device: d.deviceId, driver: d.driverVendor })) }, null, 2))
+    } catch { /* diagnostics only */ }
+  }, 20000))
 }
 
 function startApp() {
