@@ -246,3 +246,7 @@ html[data-theme-jukebox=on] .brand{color:#fff;text-shadow:0 0 8px #fff,0 0 22px 
 html[data-theme-jukebox=on] .idle h1{animation:jukebox-neon 3.5s ease-in-out infinite}
 @keyframes jukebox-neon{50%{text-shadow:0 0 6px #fff,0 0 30px #ff4bd8,0 0 60px #35c7ff}}
 @media (prefers-reduced-motion:reduce){html[data-theme-jukebox=on] .top::before,html[data-theme-jukebox=on] .idle h1{animation:none}}
+
+/* Calm touchscreen (Sam, 2026-10-16): the venue PC's graphics chip was running 60-100% busy,
+   which made the TV video drop frames. No always-moving effects on the song picker. */
+.top::before,.idle h1,html[data-theme-jukebox=on] .top::before,html[data-theme-jukebox=on] .idle h1{animation:none!important}

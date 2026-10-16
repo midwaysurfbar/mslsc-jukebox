@@ -24,17 +24,6 @@ const { createLibraryManager } = require('./lib/library-manager')
 // allow autoplay without a gesture.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
-// Hardware video decoding on Linux (Sam, 2026-10-16). Without this the venue
-// PC (Intel HD, VA-API) decoded every frame on the CPU and dropped up to 39%
-// of the frames on 1080p60 videos - the TV "jumped". Windows did this by
-// default; Linux Chromium needs asking. If a PC can't do it, Chromium falls
-// back to software decoding by itself. JUKEBOX_NO_HWDECODE=1 turns it off.
-if (process.platform === 'linux' && !process.env.JUKEBOX_NO_HWDECODE) {
-  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiIgnoreDriverChecks,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL')
-  app.commandLine.appendSwitch('disable-features', 'UseChromeOSDirectVideoDecoder')
-  app.commandLine.appendSwitch('ignore-gpu-blocklist')
-}
-
 // An uncaught error used to pop Electron's "A JavaScript error occurred"
 // dialog live at the bar (2026-09-12: an EBUSY from a temp-file clean-up).
 // Log it and keep running instead.
@@ -49,6 +38,36 @@ const FFMPEG_PATH = app.isPackaged ? ffmpegStaticPath.replace('app.asar', 'app.a
 // Development/testing only: JUKEBOX_USER_DATA points the app at a separate
 // data folder, so a test run never touches the real library/queue/settings.
 if (process.env.JUKEBOX_USER_DATA) app.setPath('userData', process.env.JUKEBOX_USER_DATA)
+
+// Hardware video decoding on Linux (Sam, 2026-10-16). Without this the venue
+// PC (Intel HD, VA-API) decoded every frame on the CPU and dropped up to 39%
+// of the frames on 1080p60 videos - the TV "jumped". Windows did this by
+// default; Linux Chromium needs asking. If a PC can't do it, Chromium falls
+// back to software decoding by itself. JUKEBOX_NO_HWDECODE=1 turns it off.
+// `chromium-flags.txt` in the data folder (one flag per line, `--name` or
+// `--name=value`, `#` for comments) adds or overrides Chromium switches, so a
+// PC can be tuned without a new release; a line `--no-default-flags` skips the
+// built-in set below. Changes need a restart.
+const extraFlags = []
+let skipDefaultFlags = false
+try {
+  const flagsFile = path.join(app.getPath('userData'), 'chromium-flags.txt')
+  if (fs.existsSync(flagsFile)) {
+    for (const raw of fs.readFileSync(flagsFile, 'utf8').split(/\r?\n/)) {
+      const line = raw.trim()
+      if (!line || line.startsWith('#')) continue
+      if (line === '--no-default-flags') { skipDefaultFlags = true; continue }
+      const m = /^--([A-Za-z0-9-]+)(?:=(.*))?$/.exec(line)
+      if (m) extraFlags.push([m[1], m[2]])
+    }
+  }
+} catch { /* a bad flags file must never stop the Jukebox starting */ }
+if (process.platform === 'linux' && !process.env.JUKEBOX_NO_HWDECODE && !skipDefaultFlags) {
+  app.commandLine.appendSwitch('enable-features', 'VaapiVideoDecoder,VaapiIgnoreDriverChecks,AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL')
+  app.commandLine.appendSwitch('disable-features', 'UseChromeOSDirectVideoDecoder')
+  app.commandLine.appendSwitch('ignore-gpu-blocklist')
+}
+for (const [name, value] of extraFlags) value === undefined ? app.commandLine.appendSwitch(name) : app.commandLine.appendSwitch(name, value)
 
 // Bundled with the app - there's exactly one intro clip, so nothing to pick.
 const INTRO_VIDEO_PATH = path.join(__dirname, 'assets', 'intro-video.mp4')
