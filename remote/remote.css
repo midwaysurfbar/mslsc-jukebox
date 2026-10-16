@@ -194,3 +194,24 @@ h1,.wordmark,.pair-card h1,.top h1{color:var(--t-accent-2,#FF2E97);text-shadow:0
 
 /* THEMEVARS-DONE: colours follow the club theme (theme.js); the neon values are the fallbacks */
 html[data-theme-glow=off] h1,html[data-theme-glow=off] .wordmark{text-shadow:none}
+
+/* ---- readability on every theme (Sam, 2026-10-16) ----
+   The neon block above assumed a dark theme: white song names, and button
+   text taken from --t-text (dark on the light surf theme) over dark-green
+   buttons. Text now uses the theme's own text colours, and text on a coloured
+   button uses that colour's --t-*-text, so light and dark themes both read. */
+.what b{color:var(--ink)}
+.what span,.pos,.dur{color:var(--muted)}
+.tv-text b,.code,.code-address,.pair-card h1,.top h1{color:var(--ink)}
+.top h1{color:var(--t-accent-2,#FF2E97)}
+.primary,.tv-btn,.tabs button.on,.seg button.on{color:var(--t-accent-text,#fff)}
+.tv-btn{background:var(--teal)}
+.tv-card.on .tv-btn,.danger{background:var(--red);color:var(--t-accent2-text,#fff)}
+.round.big{color:var(--t-accent-text,#fff)}
+.tabs button.on .count{background:color-mix(in srgb,var(--t-accent-text,#fff) 22%,transparent);color:var(--t-accent-text,#fff)}
+.tabs button{color:var(--ink)}
+.icon.danger{background:color-mix(in srgb,var(--red) 16%,var(--card));color:var(--red);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--red) 45%,transparent)}
+.tag{background:color-mix(in srgb,var(--amber) 22%,var(--card));color:var(--ink)}
+.code-box{background:var(--card);color:var(--ink)}
+.find-yt{color:var(--t-accent2-text,#fff)}
+.secondary{box-shadow:inset 0 0 0 1.5px var(--line)}
