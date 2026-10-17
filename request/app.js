@@ -259,6 +259,9 @@ async function refreshStatus() {
     // off by staff - either way the picker shows the closed screen.
     const barClosed = s.enabled && s.barAllows === false
     $('closed').hidden = s.enabled && !barClosed
+    // Tell the touchscreen's frame page whether the picker is showing its closed screen, so that page can go full screen
+    // when the sign-in is closed too (Sam 2026-10-18). Nothing happens outside that frame.
+    try { if (window.parent !== window) window.parent.postMessage({ mslsc: 'picker', closed: !$('closed').hidden }, '*') } catch { /* no frame page to tell */ }
     $('closed-title').textContent = barClosed ? 'Bar closed' : 'Requests are closed'
     $('closed-text').textContent = barClosed ? 'Song requests open when the bar does.' : 'Enjoy the music!'
     $('closed-next').hidden = !(barClosed && s.nextOpening)
