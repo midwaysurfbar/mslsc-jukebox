@@ -250,3 +250,71 @@ html[data-theme-jukebox=on] .idle h1{animation:jukebox-neon 3.5s ease-in-out inf
 /* Calm touchscreen (Sam, 2026-10-16): the venue PC's graphics chip was running 60-100% busy,
    which made the TV video drop frames. No always-moving effects on the song picker. */
 .top::before,.idle h1,html[data-theme-jukebox=on] .top::before,html[data-theme-jukebox=on] .idle h1{animation:none!important}
+
+/* ==== Picker flow update (Sam, 2026-10-17) ==== */
+/* slim now-playing bar: one line, tap to open the queue */
+#main .top{grid-template-columns:1fr auto;gap:8px 14px;padding:10px 16px 18px;border-radius:0 0 20px 20px;box-shadow:0 5px 0 var(--sand-2);align-items:center}
+#main .top::after{height:8px}
+.np{position:relative;z-index:1;display:flex;align-items:center;gap:12px;min-width:0;text-align:left;background:transparent;color:var(--paper);padding:4px 2px}
+.np-note{font-size:30px;line-height:1;color:var(--red-soft)}
+.np-text{display:flex;align-items:baseline;gap:8px;min-width:0;flex:1;overflow:hidden;white-space:nowrap}
+.np-text .label{font-family:var(--label);color:var(--red-soft);font-weight:800;text-transform:uppercase;letter-spacing:.14em;font-size:13px;flex:none}
+.np-text strong{font-family:var(--display);font-weight:400;font-size:22px;color:var(--t-header-text,var(--paper));overflow:hidden;text-overflow:ellipsis;min-width:0}
+.np-text #now-artist{color:var(--green-soft);font-size:17px;font-weight:600;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.np-queue{flex:none;font-family:var(--label);font-weight:800;font-size:15px;letter-spacing:.06em;text-transform:uppercase;padding:6px 14px;border-radius:999px;background:var(--red);color:var(--t-text,#fff)}
+.np-caret{flex:none;font-size:20px;transition:transform .15s}
+.np.open .np-caret{transform:rotate(180deg)}
+#main .top .pill{position:relative;z-index:1;padding:7px 14px;font-size:14px}
+.queue-panel{position:relative;z-index:1;grid-column:1/-1;background:var(--paper);color:var(--ink);border-radius:16px;padding:12px 18px 14px;border:3px solid var(--green)}
+.queue-panel h3{margin:0 0 6px;font-family:var(--label);font-weight:800;text-transform:uppercase;letter-spacing:.16em;font-size:14px;color:var(--red)}
+.queue-panel ol{margin:0;padding-left:26px;display:grid;gap:4px;font-size:19px}
+.queue-panel li b{font-weight:700}
+.queue-panel li span{color:var(--muted);font-weight:600;font-size:16px}
+.queue-panel li.yours{color:var(--green)}
+.queue-panel li em{font-style:normal;font-family:var(--label);font-weight:800;font-size:12px;letter-spacing:.12em;text-transform:uppercase;background:var(--green);color:var(--t-bg,#fff);border-radius:999px;padding:2px 9px;margin-left:6px}
+.q-note{margin:8px 0 0;font-size:16px;font-weight:600;color:var(--muted)}
+
+/* starting view: big decade tiles */
+.start{padding:6px 24px 36px}
+.start-title{margin:10px 0 14px;text-align:center;font-family:var(--display);font-weight:400;font-size:clamp(26px,3.4vw,38px);color:var(--red)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+.tile{display:grid;gap:4px;align-content:center;justify-items:center;min-height:116px;padding:18px 14px;border-radius:24px;background:var(--paper);color:var(--ink);
+  border:3px solid var(--sand-2);border-top:12px solid var(--green);box-shadow:0 5px 0 var(--sand-2)}
+.tile:nth-child(3n+2){border-top-color:var(--red)}
+.tile:nth-child(3n+3){border-top-color:var(--red-soft)}
+.tile:active{transform:translateY(3px);box-shadow:0 2px 0 var(--sand-2)}
+.tile-big{font-family:var(--display);font-size:clamp(30px,3.6vw,44px);line-height:1.05;color:var(--charcoal)}
+.tile-small{font-family:var(--label);font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:15px;color:var(--muted)}
+.tile-all{background:var(--charcoal);color:var(--paper);border-top-color:var(--red)}
+.tile-all .tile-big{color:var(--paper);font-size:clamp(26px,3vw,36px)}
+.tile-all .tile-small{color:var(--green-soft)}
+.browse-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:6px 24px 0}
+.back-start{font-family:var(--label);font-weight:800;font-size:17px;letter-spacing:.06em;text-transform:uppercase;padding:11px 18px;border-radius:999px;background:var(--charcoal);color:var(--paper);box-shadow:0 3px 0 var(--red)}
+.back-start:active{transform:translateY(2px);box-shadow:0 1px 0 var(--red)}
+
+/* quick adding: a small message at the bottom that doesn't cover the list, and the button stays "added" */
+.toast{left:50%;top:auto;bottom:26px;transform:translateX(-50%);padding:12px 24px;border-radius:999px;border-top:0;border-left:12px solid var(--red);
+  font-size:21px;line-height:1.2;max-width:min(640px,92vw);pointer-events:none;box-shadow:0 5px 0 var(--sand-2),0 12px 30px #0005}
+.toast.ok{border-left-color:var(--green)}
+.toast.warn{border-left-color:var(--charcoal)}
+.toast small{display:inline;margin:0 0 0 8px;font-size:17px}
+body.kb-open .toast{bottom:auto;top:92px}
+.song .add.added{background:var(--green);color:var(--t-bg,#fff);box-shadow:0 0 0 4px var(--paper),0 0 0 6px var(--green)}
+.song .add.added:disabled{background:var(--green);color:var(--t-bg,#fff)}
+
+@media (orientation:portrait){
+  #main .top{grid-template-columns:1fr auto;padding:10px 16px 18px}
+  .np-text{flex-wrap:nowrap}
+}
+@media (max-width:760px){
+  #main .top{grid-template-columns:1fr}
+  #main .top .pill{justify-self:start}
+  .np-text .label{display:none}
+}
+/* grid children must be allowed to shrink or a long title pushes the whole bar wider than the screen */
+#main .top > *{min-width:0}
+.np{width:100%}
+.queue-panel ol{min-width:0}
+.queue-panel li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* overflow:clip (not hidden) so tapping a button can never scroll the bar sideways */
+#main .top{overflow:clip}

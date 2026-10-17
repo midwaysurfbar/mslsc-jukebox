@@ -23,16 +23,23 @@
 
 <!-- The song picker -->
 <section id="main" class="screen" hidden>
+  <!-- Slim now-playing bar (2026-10-17): one line, tap it to see the queue -->
   <header class="top">
-    <p class="brand">Midway Jukebox</p>
-    <div class="now">
-      <span class="label">Now playing</span>
-      <strong id="now-title">—</strong>
-      <span id="now-artist"></span>
-    </div>
-    <div class="side">
-      <div class="pill" id="state-pill"></div>
-      <div class="next" id="up-next"></div>
+    <button class="np" id="np-btn" type="button" aria-expanded="false" aria-controls="queue-panel">
+      <span class="np-note" aria-hidden="true">♪</span>
+      <span class="np-text">
+        <span class="label" id="now-label">Now playing</span>
+        <strong id="now-title">—</strong>
+        <span id="now-artist"></span>
+      </span>
+      <span class="np-queue" id="queue-count"></span>
+      <span class="np-caret" aria-hidden="true">▾</span>
+    </button>
+    <div class="pill" id="state-pill"></div>
+    <div class="queue-panel" id="queue-panel" hidden>
+      <h3>Up next</h3>
+      <ol id="queue-list"></ol>
+      <p class="q-note" id="q-note"></p>
     </div>
   </header>
 
@@ -41,16 +48,28 @@
   <div class="tools">
     <button class="search" id="search-btn" type="button"><span id="search-text">Search songs or artists</span></button>
     <button class="suggest-btn" id="suggest-btn" type="button">Suggest a song</button>
-    <div class="chips" id="decades"></div>
   </div>
-  <div class="letters" id="letters"></div>
 
-  <div class="grid" id="grid"></div>
-  <div id="more"></div>
-  <div class="empty" id="empty" hidden>
-    <p>No songs match that.</p>
-    <button class="suggest-btn big" id="empty-suggest" type="button">Can't find it? Suggest it</button>
-  </div>
+  <!-- Starting view: big decade tiles (nothing searched or filtered yet) -->
+  <section id="start" class="start">
+    <h2 class="start-title">Pick a decade, or search above</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <!-- Browsing: the list with its filters -->
+  <section id="browse" hidden>
+    <div class="browse-bar">
+      <button class="back-start" id="back-start" type="button">◀ Back to start</button>
+      <div class="chips" id="decades"></div>
+    </div>
+    <div class="letters" id="letters"></div>
+    <div class="grid" id="grid"></div>
+    <div id="more"></div>
+    <div class="empty" id="empty" hidden>
+      <p>No songs match that.</p>
+      <button class="suggest-btn big" id="empty-suggest" type="button">Can't find it? Suggest it</button>
+    </div>
+  </section>
   <button class="to-top" id="to-top" type="button" hidden>▲ Back to search &amp; filters</button>
 </section>
 

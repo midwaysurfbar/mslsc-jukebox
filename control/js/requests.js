@@ -21,7 +21,7 @@ function describeTrack(key) {
   const meta = metadataCache[key]
   // a name typed on the Library page wins (same as describeFile in ../lib/library.js)
   const title = (meta && meta.confidence === 'manual' && meta.title) || guess.title
-  return { title, artist: meta && meta.artist && meta.artist !== 'Unknown' ? meta.artist : guess.artist }
+  return { key, title, artist: meta && meta.artist && meta.artist !== 'Unknown' ? meta.artist : guess.artist }
 }
 // Index of the first song still to come (after whatever is on screen, or
 // finished last).
@@ -41,7 +41,7 @@ function pushRequestStatus() {
     // paused = nothing is actually playing, so the picker doesn't say
     // "Now playing" on its closed / idle screens (Sam 2026-10-10)
     paused: Boolean(lastPlayerState && lastPlayerState.status === 'paused'),
-    upNext: waiting.slice(0, 3).map(describeTrack).filter(Boolean),
+    upNext: waiting.slice(0, 8).map(describeTrack).filter(Boolean),   // the picker shows the next few (was 3; 8 lets it show the queue, 2026-10-17)
     waiting: waiting.length,
   }
   const sig = JSON.stringify(snapshot)

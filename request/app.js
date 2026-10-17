@@ -22,6 +22,8 @@ let decade = ''
 let letter = ''
 let shown = 0
 let filtered = []
+let allMode = false        // "All songs A-Z" tile pressed
+const myKeys = new Set()   // songs added from this screen since it last went back to the start
 
 // ---- server calls ---------------------------------------------------------
 async function api(path, options = {}) {
@@ -80,10 +82,20 @@ async function loadLibrary() {
   if (!data.ok) return
   tracks = data.tracks.map((t) => ({ ...t, n: norm(`${t.t} ${t.a}`), first: norm(t.t).replace(/^the /, '').charAt(0) }))
   const decades = [...new Set(tracks.map((t) => t.d).filter(Boolean))].sort()
+  // starting view: one big tile per decade (with how many songs), plus all songs A-Z
+  const tiles = $('tiles'); tiles.innerHTML = ''
+  const addTile = (label, count, onTap, cls) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = `tile ${cls || ''}`
+    const big = document.createElement('span'); big.className = 'tile-big'; big.textContent = label
+    const small = document.createElement('span'); small.className = 'tile-small'; small.textContent = `${count} song${count === 1 ? '' : 's'}`
+    b.append(big, small); b.addEventListener('click', onTap); tiles.append(b)
+  }
+  for (const d of decades) addTile(d, tracks.filter((t) => t.d === d).length, () => { decade = d; letter = ''; applyFilters() })
+  addTile('All songs A–Z', tracks.length, () => { allMode = true; decade = ''; letter = ''; applyFilters() }, 'tile-all')
   const box = $('decades'); box.innerHTML = ''
   for (const d of ['', ...decades]) {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = d || 'All songs'; b.dataset.decade = d
-    b.addEventListener('click', () => { decade = d; letter = ''; applyFilters() })
+    b.addEventListener('click', () => { decade = d; allMode = !d; letter = ''; applyFilters() })
     box.append(b)
   }
   const letters = $('letters'); letters.innerHTML = ''
@@ -100,6 +112,10 @@ function applyFilters() {
     (!decade || t.d === decade) &&
     (!letter || (letter === '#' ? !/[a-z]/.test(t.first) : t.first === letter.toLowerCase())) &&
     (!q || q.split(/\s+/).every((w) => t.n.includes(w))))
+  // nothing searched or chosen yet = the starting view; otherwise the list
+  const browsing = Boolean(q || decade || letter || allMode)
+  $('start').hidden = browsing
+  $('browse').hidden = !browsing
   document.querySelectorAll('#decades button').forEach((b) => b.classList.toggle('on', b.dataset.decade === decade))
   document.querySelectorAll('#letters button').forEach((b) => b.classList.toggle('on', b.dataset.letter === letter))
   $('grid').innerHTML = ''
@@ -121,7 +137,7 @@ function showMore() {
     const artist = document.createElement('div'); artist.className = 'artist'; artist.textContent = [t.a, t.d].filter(Boolean).join(' · ')
     info.append(title, artist)
     const add = document.createElement('button'); add.type = 'button'; add.className = 'add'; add.textContent = 'Add to queue'
-    add.disabled = full
+    if (myKeys.has(t.k)) { add.textContent = '✓ Added'; add.classList.add('added'); add.disabled = true } else add.disabled = full
     add.addEventListener('click', () => requestSong(t, add))
     card.append(thumb, info, add)
     grid.append(card)
@@ -133,32 +149,38 @@ new IntersectionObserver((entries) => { if (entries[0].isIntersecting && shown <
 
 // "Back to search & filters" once the letters row has scrolled off the top
 function updateToTop() {
-  $('to-top').hidden = $('letters').getBoundingClientRect().bottom > document.querySelector('.top').getBoundingClientRect().bottom
+  $('to-top').hidden = $('browse').hidden || $('letters').getBoundingClientRect().bottom > document.querySelector('.top').getBoundingClientRect().bottom
 }
 window.addEventListener('scroll', updateToTop, { passive: true })
 $('to-top').addEventListener('click', () => { window.scrollTo(0, 0); updateToTop() })
 
 // ---- requesting -----------------------------------------------------------
-let busy = false
+// Quick adding (Sam, 2026-10-17): no waiting between songs. The button turns into "✓ Added" and stays that way, and the
+// message is a small one at the bottom that doesn't cover the list.
 async function requestSong(track, button) {
-  if (busy) return
-  busy = true
+  if (button.disabled) return
   button.disabled = true
+  let added = false
   try {
     const r = await api('/api/request', { method: 'POST', body: JSON.stringify({ key: track.k }) })
-    if (r.ok) toast(`Added! <small>“${esc(track.t)}” is number ${r.position} in the queue.</small>`, 'ok')
+    if (r.ok) {
+      added = true
+      myKeys.add(track.k)
+      button.textContent = '✓ Added'; button.classList.add('added')
+      toast(`Added “${esc(track.t)}” <small>number ${r.position} in the queue</small>`, 'ok')
+    }
     else if (r.reason === 'full') toast('The queue is full right now.<small>Please wait a few minutes, then try again.</small>', 'warn')
     else if (r.reason === 'closed') toast('Requests are closed right now.', 'warn')
     else if (r.reason === 'bar-closed') toast('The bar is closed right now.<small>Song requests open when the bar does.</small>', 'warn')
-    else if (r.reason === 'queued') toast('That song is already in the queue!<small>It\'s on its way.</small>', 'warn')
+    else if (r.reason === 'queued') { myKeys.add(track.k); added = true; button.textContent = '✓ Added'; button.classList.add('added'); toast('That song is already in the queue!<small>It\'s on its way.</small>', 'warn') }
     else if (r.reason === 'recent') toast(`That one played a moment ago.<small>Try it again in about ${r.minutes} minute${r.minutes === 1 ? '' : 's'}.</small>`, 'warn')
     else toast('That song can\'t be played right now.<small>Please pick another.</small>', 'warn')
     refreshStatus()
   } catch (err) {
     if (err.message !== 'not-paired') toast('Couldn\'t reach the Jukebox.<small>Please try again.</small>', 'warn')
   } finally {
-    busy = false
-    setTimeout(() => { button.disabled = Boolean(status && status.full) }, 1500)
+    // a song that was added stays marked; anything else can be tapped again straight away
+    if (!added) button.disabled = Boolean(status && status.full)
   }
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
@@ -167,9 +189,39 @@ function toast(html, kind) {
   const el = $('toast')
   el.innerHTML = html; el.className = `toast ${kind}`; el.hidden = false
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { el.hidden = true }, 4000)
+  toastTimer = setTimeout(() => { el.hidden = true }, kind === 'ok' ? 2500 : 4000)
 }
 $('toast').addEventListener('click', () => { $('toast').hidden = true })
+
+// ---- queue panel (Sam, 2026-10-17): tap the bar to see what's coming up -----
+function renderQueue(s) {
+  const total = s.waiting || 0
+  $('queue-count').textContent = total ? `${total} up next` : ''
+  $('queue-count').hidden = !total
+  const list = $('queue-list'); list.innerHTML = ''
+  let mine = 0
+  s.upNext.forEach((u, i) => {
+    const li = document.createElement('li')
+    const yours = u.key && myKeys.has(u.key)
+    if (yours) { li.className = 'yours'; if (!mine) mine = i + 1 }
+    li.innerHTML = `<b>${esc(u.title)}</b>${u.artist ? ` <span>${esc(u.artist)}</span>` : ''}${yours ? ' <em>yours</em>' : ''}`
+    list.append(li)
+  })
+  const more = total - s.upNext.length
+  $('q-note').textContent = !total ? 'Nothing waiting - add a song!' : (mine ? `Your song is number ${mine} in the queue. ` : '') + (more > 0 ? `...and ${more} more after these.` : '')
+}
+$('np-btn').addEventListener('click', () => {
+  const open = $('queue-panel').hidden
+  $('queue-panel').hidden = !open
+  $('np-btn').setAttribute('aria-expanded', String(open))
+  $('np-btn').classList.toggle('open', open)
+})
+// tapping anywhere else closes the queue panel again
+document.addEventListener('pointerdown', (e) => {
+  if ($('queue-panel').hidden || e.target.closest('.top')) return
+  $('queue-panel').hidden = true; $('np-btn').classList.remove('open'); $('np-btn').setAttribute('aria-expanded', 'false')
+}, { passive: true })
+$('back-start').addEventListener('click', () => { query = ''; decade = ''; letter = ''; allMode = false; searchChanged(); applyFilters() })
 
 // ---- status ---------------------------------------------------------------
 // "Today · 17:00", "Tomorrow · 17:00" or "Saturday 11 October · 17:00"
@@ -195,10 +247,10 @@ async function refreshStatus() {
       if (seenLibraryVersion) { libraryStale = true; if (!$('idle').hidden) { libraryStale = false; loadLibrary().catch(() => {}) } }
       seenLibraryVersion = s.libraryVersion
     }
-    document.querySelector('.now .label').textContent = s.nowPlaying && s.paused ? 'Paused' : 'Now playing'
+    $('now-label').textContent = s.nowPlaying && s.paused ? 'Paused' : 'Now playing'
     $('now-title').textContent = s.nowPlaying ? s.nowPlaying.title : 'Nothing playing right now'
-    $('now-artist').textContent = s.nowPlaying ? s.nowPlaying.artist : 'Pick a song to get it started!'
-    $('up-next').innerHTML = s.upNext.length ? `<b>Up next</b>${s.upNext.map((u) => `<span>${esc(u.title)}${u.artist ? ` – ${esc(u.artist)}` : ''}</span>`).join('')}` : ''
+    $('now-artist').textContent = s.nowPlaying ? (s.nowPlaying.artist ? `– ${s.nowPlaying.artist}` : '') : '– pick a song to get it started!'
+    renderQueue(s)
     const pill = $('state-pill')
     pill.textContent = s.full ? 'Queue full – please wait' : 'Requests open'
     pill.classList.toggle('full', s.full)
@@ -333,7 +385,8 @@ let seenLibraryVersion = 0
 let libraryStale = false
 function resetToStart() {
   if (libraryStale) { libraryStale = false; loadLibrary().catch(() => {}) }
-  query = ''; decade = ''; letter = ''
+  query = ''; decade = ''; letter = ''; allMode = false
+  myKeys.clear(); $('queue-panel').hidden = true; $('np-btn').classList.remove('open')
   $('suggest').hidden = true; kbTarget = 'search'
   setKeyboard(false); $('toast').hidden = true
   searchChanged()
