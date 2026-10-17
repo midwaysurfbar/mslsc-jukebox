@@ -7,3 +7,7 @@
 @font-face{font-family:"Barlow Condensed";font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/barlow-condensed-600.woff2) format("woff2")}
 @font-face{font-family:"Barlow Condensed";font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/barlow-condensed-700.woff2) format("woff2")}
 @font-face{font-family:"Barlow Condensed";font-style:normal;font-weight:800;font-display:swap;src:url(/fonts/barlow-condensed-800.woff2) format("woff2")}
+/* The real-jukebox look (2026-10-18): Monoton neon lettering, Anton, Special Elite typewriter. SIL Open Font License. */
+@font-face{font-family:"Monoton";font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/monoton-400.woff2) format("woff2")}
+@font-face{font-family:"Anton";font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/anton-400.woff2) format("woff2")}
+@font-face{font-family:"Special Elite";font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/special-elite-400.woff2) format("woff2")}

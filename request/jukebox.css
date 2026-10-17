@@ -1,0 +1,124 @@
+/* The song picker dressed as a real jukebox again (Sam, 2026-10-18, now that the venue PC is stronger).
+   The look of the very first picker (2026-09-28): dark polished wood, an arch of glowing bubble tube that slowly runs
+   through the colours, the now-playing song in a lit display window, songs on cream 45rpm title strips with red
+   push-buttons, chrome buttons, Monoton neon lettering. Loaded after style.css and only dresses the picking screens
+   (list, suggest form, keyboard, messages) - the closed / idle / offline screens keep the club's sunburst, which now
+   continues across the whole touchscreen. */
+#main,.suggest,.keyboard,.toast,#pair{
+  --sand:#2a120a; --sand-2:#4a2413; --paper:#fbf2dc; --charcoal:#1a0a05; --green:#c9a24a; --red:#d8342a; --red-2:#9c1c15;
+  --red-soft:#ffcf6e; --green-soft:#e6c9a0; --ink:#2b1a12; --muted:#6a4a30;
+  --display:"Anton",Impact,sans-serif; --label:"Barlow Condensed","Barlow",system-ui,sans-serif;
+  --typewriter:"Special Elite","Barlow",system-ui,sans-serif;
+  --chrome-1:#fbfbfb; --chrome-2:#b9bec4; --amber:#ffb238; --glow:#ffcf6e;
+}
+html body{background:
+  repeating-linear-gradient(90deg,rgba(0,0,0,.18) 0 2px,transparent 2px 9px),
+  repeating-linear-gradient(90deg,rgba(255,190,120,.05) 0 1px,transparent 1px 23px),
+  linear-gradient(180deg,#6b3519,#2a120a 55%,#1b0b06);
+  background-attachment:fixed;color:#fff4de}
+
+/* chrome buttons: decades, letters, keyboard keys */
+#main .chips button,#main .letters button,.keyboard .kb-row button,#pair .keypad button,.kb-done,#main .back-start{
+  background:linear-gradient(180deg,var(--chrome-1),var(--chrome-2) 45%,#8d949a 55%,#dfe3e6);color:#2a2a2a;border:0;
+  box-shadow:inset 0 1px 0 #fff,0 3px 0 #555,0 5px 10px #0008;border-radius:12px;font-family:var(--label);font-weight:800;letter-spacing:.06em}
+#main .chips button:active,#main .letters button:active,.keyboard .kb-row button:active,#main .back-start:active{transform:translateY(2px);box-shadow:inset 0 1px 0 #fff,0 1px 0 #555,0 2px 5px #0008}
+#main .chips button.on,#main .letters button.on{background:radial-gradient(circle at 50% 35%,#ffe7a8,var(--amber) 55%,#c47a0e);color:#3a1d05;box-shadow:0 0 18px var(--amber),inset 0 1px 0 #fff6,0 3px 0 #7a4a08}
+#main .chips button{border-radius:999px}
+#main .letters button{border-radius:50%}
+.kb-done{background:radial-gradient(circle at 50% 35%,#ffe7a8,var(--amber) 55%,#c47a0e);color:#3a1d05}
+
+/* ---- the arch: neon bubble tube + lit display window ---- */
+#main .top{position:sticky;top:0;z-index:5;margin:0 14px;padding:78px 22px 16px;overflow:hidden;
+  display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:center;border-radius:0 0 26px 26px;color:#fff4de;
+  background:radial-gradient(ellipse at 50% 0%,#5a2410,#301409 45%,#1a0a05);box-shadow:0 10px 26px #000c,inset 0 -2px 0 #0008}
+#main .top::after{display:none}
+#main .top::before{content:"";position:absolute;inset:auto;left:20px;right:20px;top:10px;height:150px;
+  border:9px solid transparent;border-bottom:0;border-radius:50% 50% 0 0/100% 100% 0 0;
+  background:linear-gradient(90deg,#ff3b3b,#ffb238,#ffe066,#3ee07a,#35c7ff,#b066ff,#ff3b3b) border-box;
+  -webkit-mask:linear-gradient(#000 0 0) padding-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;
+  filter:drop-shadow(0 0 8px #ff9a3c) drop-shadow(0 0 18px #ff5a3c) hue-rotate(0deg);
+  pointer-events:none;display:block;transform:none;animation:jb-tube 16s linear infinite!important}
+@keyframes jb-tube{to{filter:drop-shadow(0 0 8px #ff9a3c) drop-shadow(0 0 18px #ff5a3c) hue-rotate(360deg)}}
+#main .brand{position:absolute;left:0;right:0;top:26px;margin:0;text-align:center;font-family:Monoton,Anton,sans-serif;font-size:clamp(26px,3.4vw,38px);letter-spacing:.06em;color:#fff;
+  text-shadow:0 0 6px #fff,0 0 16px var(--amber),0 0 34px #ff6a2b;pointer-events:none}
+#main .np{background:linear-gradient(180deg,#fff7df,#ffe6a8);color:#3a1d05;border:3px solid #c9a24a;border-radius:14px;padding:8px 14px;
+  box-shadow:0 0 26px #ffb23888,inset 0 0 18px #ffb23866,inset 0 2px 0 #fff}
+#main .np-note{color:#c22d24}
+#main .np-text .label{color:#c22d24;font-family:var(--label)}
+#main .np-text strong{font-family:var(--typewriter);font-size:21px;color:#3a1d05}
+#main .np-text #now-artist{color:#6a3d12;font-family:var(--typewriter);font-size:16px}
+#main .np-queue{background:#c22d24;color:#fff;box-shadow:0 2px 0 #7a1511}
+#main .np-caret{color:#3a1d05}
+#main .top .pill,#main .pill{font-family:var(--label);color:#10310f;background:radial-gradient(circle at 50% 35%,#c8ffb0,#4cd964 60%,#1d8a33);box-shadow:0 0 16px #4cd96499}
+#main .pill.full{color:#3a1d05;background:radial-gradient(circle at 50% 35%,#ffe7a8,var(--amber) 55%,#c47a0e);box-shadow:0 0 16px var(--amber)}
+#main .queue-panel{background:var(--paper);color:var(--ink);border:0;border-top:6px solid #c22d24;border-bottom:6px solid #c22d24;border-radius:6px;box-shadow:0 6px 14px #000a}
+#main .queue-panel h3{color:#c22d24;font-family:var(--label)}
+#main .queue-panel li,#main .queue-panel li b{font-family:var(--typewriter);font-weight:400}
+#main .queue-panel li span,.q-note{color:#6a4a30;font-family:var(--typewriter)}
+#main .queue-panel li.yours{color:#1d6a3a}
+#main .queue-panel li em{background:#2f8f4e;color:#fff}
+.banner{background:var(--paper);color:#2b1a12;border-left:12px solid var(--amber);border-radius:10px;font-family:var(--typewriter);box-shadow:0 6px 14px #000a}
+
+/* ---- search + tools ---- */
+#main .search{background:var(--paper);color:#7a5a3d;border-radius:14px;font-family:var(--typewriter);border:0;
+  box-shadow:inset 0 3px 8px #0003,0 0 0 4px #c9a24a,0 0 0 7px #3a1d0a}
+#main .search.has-text{color:#2b1a12}
+#main .suggest-btn{background:linear-gradient(180deg,#fbfbfb,#b9bec4 45%,#8d949a 55%,#dfe3e6);color:#2a2a2a;border:0;
+  box-shadow:inset 0 1px 0 #fff,0 3px 0 #555,0 5px 10px #0008;border-radius:12px}
+#main .suggest-btn:active{transform:translateY(2px);box-shadow:inset 0 1px 0 #fff,0 1px 0 #555,0 2px 5px #0008}
+
+/* ---- the starting view: decade tiles as 45rpm title strips ---- */
+#main .start-title{font-family:var(--typewriter);font-size:clamp(22px,2.8vw,30px);color:var(--glow);text-shadow:0 0 12px #ff9a3c88}
+#main .tile{background:var(--paper);color:var(--ink);border:0;border-top:7px solid #c22d24;border-bottom:7px solid #c22d24;border-radius:6px;
+  box-shadow:0 6px 14px #000a,inset 0 0 0 1px #e8d6ad;position:relative}
+#main .tile::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #d9bf8a;pointer-events:none}
+#main .tile .tile-big,#main .tile .tile-small{position:relative;background:var(--paper);padding:0 10px}
+#main .tile-big{font-family:var(--display);color:#2b1a12;letter-spacing:.03em}
+#main .tile-small{font-family:var(--typewriter);font-weight:400;color:#8a2a22;letter-spacing:.06em}
+#main .tile:active{transform:translateY(3px)}
+#main .tile-all{background:radial-gradient(circle at 50% 35%,#ffe7a8,var(--amber) 55%,#c47a0e);border-top-color:#7a4a08;border-bottom-color:#7a4a08;box-shadow:0 0 18px var(--amber),0 6px 14px #000a}
+#main .tile-all .tile-big,#main .tile-all .tile-small{background:transparent;color:#3a1d05}
+#main .tile-all::before{display:none}
+
+/* ---- songs: 45rpm title strips, a red push-button each ---- */
+#main .grid{gap:16px}
+#main .song{background:var(--paper);color:var(--ink);border-radius:6px;border:0;border-top:6px solid #c22d24;border-bottom:6px solid #c22d24;
+  padding:14px 12px 14px 16px;box-shadow:0 6px 14px #000a,inset 0 0 0 1px #e8d6ad}
+#main .song:nth-child(3n+2),#main .song:nth-child(3n+3){border-top-color:#c22d24;border-bottom-color:#c22d24}
+#main .song::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:1px dashed #d9bf8a}
+#main .song .info{background:var(--paper)}
+#main .song .title{font-family:var(--typewriter);font-weight:400;text-align:center}
+#main .song .artist{color:#9c1c15;text-align:center;font-family:var(--label)}
+#main .song .add{width:76px;height:76px;border-radius:50%;color:#fff;font-family:var(--label);
+  background:radial-gradient(circle at 40% 30%,#ff8a7a,#d8342a 50%,#9c1c15);
+  box-shadow:0 0 0 5px #d9dde0,0 0 0 7px #7a7f85,0 4px 0 7px #555,0 8px 14px 6px #0007,inset 0 2px 0 #fff6}
+#main .song .add:active{transform:translateY(3px);box-shadow:0 0 0 5px #d9dde0,0 0 0 7px #7a7f85,0 1px 0 7px #555,inset 0 2px 0 #fff6}
+#main .song .add:disabled{background:radial-gradient(circle at 40% 30%,#bfb6a8,#8a8175 60%,#5f584f);color:#eee}
+#main .empty{color:var(--green-soft);font-family:var(--typewriter)}
+.to-top{background:radial-gradient(circle at 50% 35%,#ffe7a8,var(--amber) 55%,#c47a0e);color:#3a1d05;box-shadow:0 0 18px var(--amber),0 8px 20px #000c,0 3px 0 #7a4a08}
+
+/* ---- suggest a song ---- */
+.suggest{background:rgba(10,4,2,.78)}
+.suggest-card{background:var(--paper);border:0;border-top:12px solid #c22d24;border-bottom:12px solid #c22d24;border-radius:10px;box-shadow:0 0 30px #ffb23855,0 14px 30px #000a}
+.suggest-card h2{font-family:Monoton,Anton,sans-serif;color:#c22d24;text-shadow:none;letter-spacing:.04em}
+.suggest-card p{color:#6a4a30;font-family:var(--typewriter)}
+.suggest .field{background:#fffaf0;border:4px solid #c9a24a;border-radius:12px}
+.suggest .field.on{border-color:#c22d24}
+.suggest .field span{color:#9c1c15}
+.suggest .field b{font-family:var(--typewriter);font-weight:400;color:#2b1a12}
+.sg-cancel{background:linear-gradient(180deg,#fbfbfb,#b9bec4 45%,#8d949a 55%,#dfe3e6);color:#2a2a2a;box-shadow:0 3px 0 #555}
+.sg-send{background:radial-gradient(circle at 40% 30%,#ff8a7a,#d8342a 50%,#9c1c15);color:#fff;box-shadow:0 4px 0 #6a120c}
+
+/* ---- keyboard ---- */
+.keyboard{background:linear-gradient(180deg,#3a1a0c,#1c0b05);border-top:4px solid #c9a24a;box-shadow:0 -6px 24px #000c;padding-top:20px}
+.keyboard::before{display:none}
+#kb-preview{font-family:var(--typewriter);color:var(--glow)}
+.kb-row button{box-shadow:inset 0 1px 0 #fff,0 3px 0 #555,0 5px 10px #0008}
+
+/* ---- messages ---- */
+.toast{background:var(--paper);color:#2b1a12;border:0;border-top:14px solid #c22d24;border-bottom:14px solid #c22d24;border-radius:10px;font-family:var(--typewriter);
+  box-shadow:0 0 30px #ffb23866,0 14px 30px #000a}
+.toast.ok{border-color:#2f8f4e}
+.toast.warn{border-color:var(--amber)}
+.toast small{color:#6a4a30;font-family:var(--label)}
+@media (prefers-reduced-motion:reduce){#main .top::before{animation:none!important}}

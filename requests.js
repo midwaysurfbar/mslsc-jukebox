@@ -59,6 +59,7 @@ const PAGE_FILES = {
   '/index.html': ['request/index.html', 'text/html; charset=utf-8'],
   '/app.js': ['request/app.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['request/style.css', 'text/css; charset=utf-8'],
+  '/jukebox.css': ['request/jukebox.css', 'text/css; charset=utf-8'],
   '/remote': ['remote/index.html', 'text/html; charset=utf-8'],
   '/remote/': ['remote/index.html', 'text/html; charset=utf-8'],
   '/remote/remote.js': ['remote/remote.js', 'text/javascript; charset=utf-8'],
@@ -70,7 +71,7 @@ const PAGE_FILES = {
 }
 // the shared club "retro surf" fonts (2026-10-10), served locally so the
 // touchscreen never needs the internet for them
-for (const f of ['shrikhand-400', 'barlow-500', 'barlow-600', 'barlow-700', 'barlow-800', 'barlow-condensed-600', 'barlow-condensed-700', 'barlow-condensed-800']) {
+for (const f of ['shrikhand-400', 'monoton-400', 'anton-400', 'special-elite-400', 'barlow-500', 'barlow-600', 'barlow-700', 'barlow-800', 'barlow-condensed-600', 'barlow-condensed-700', 'barlow-condensed-800']) {
   PAGE_FILES[`/fonts/${f}.woff2`] = [`request/fonts/${f}.woff2`, 'font/woff2']
 }
 PAGE_FILES['/fonts/surf-fonts.css'] = ['request/fonts/surf-fonts.css', 'text/css; charset=utf-8']
