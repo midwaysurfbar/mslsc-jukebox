@@ -25,9 +25,11 @@
   //   * "Destiny s Child" / "Don t" (apostrophes a download tool turned into
   //     spaces) get their apostrophe back
   //   * leading track numbers go only as "01 - " / "01. " - "50 Cent" stays
-  const NOISE = '(?:official|video|hd|hq|4k|1080p|720p|lyrics?|audio|vod|remaster(?:ed)?|explicit|uncensored|dirty|visuali[sz]er|subtitlad[ao]|oficial|mv|clip)'
+  // 2026-10-17 (Sam: "tidy up"): also "FULL VERSION!", "OFFICIAL PROMO", "(Version 1)", "(Videoclip)", "(Album Version)",
+  // "(COLOR and STEREO)" and a "• TopPop" source tag - none is part of the song's name.
+  const NOISE = '(?:official|video|hd|hq|4k|1080p|720p|lyrics?|audio|vod|remaster(?:ed)?|explicit|uncensored|dirty|visuali[sz]er|subtitlad[ao]|oficial|mv|clip|promo|videoclip|full version|album version|version \\d+|color and stereo)'
   const NOISE_BRACKET = new RegExp(`\\s*[\\[(][^\\[\\]()]*\\b${NOISE}\\b[^\\[\\]()]*[\\])]`, 'gi')
-  const NOISE_TAIL = new RegExp(`\\s+(?:official(?: music| lyric)? video|music video|lyric video|official audio|full hd|in (?:hd|high definition)|${NOISE})\\s*$`, 'i')
+  const NOISE_TAIL = new RegExp(`\\s+(?:official(?: music| lyric)? video|music video|lyric video|official audio|full hd|in (?:hd|high definition)|${NOISE})[!.]*\\s*$`, 'i')
   const FEAT = /\s+[([]?\s*(?:ft|feat|featuring)\.?\s+([^()[\]]+?)\s*[)\]]?\s*$/i
 
   function tidy(text) {
@@ -48,6 +50,7 @@
     let name = String(filename || '').replace(/\.[^.]+$/, '')
     name = name.replace(/\p{Cf}/gu, '').replace(/[_]+/g, ' ')
     name = name.replace(/^\s*\d{1,3}\s*(?:[.)]|-)\s+/, '') // leading track numbers ("01 - ", "01. ")
+    name = name.replace(/\s+[•·]\s+.*$/, '') // a "• TopPop" style source tag on the end
     for (let i = 0; i < 3; i++) name = name.replace(NOISE_BRACKET, '')
     name = name.replace(/\s*\(\d\)\s*$/, '') // "Wonderwall (1)" - a second copy of the file
     for (let i = 0; i < 4; i++) name = name.replace(NOISE_TAIL, '')
@@ -74,5 +77,14 @@
     return { artist: tidy(artist), title: tidy(title) }
   }
 
-  return { guessArtistTitle }
+  // An explicit year in a bracket of the filename - "(1979)", "(Live 1972)" - means the song is from about then.
+  // Brackets that are video noise ("Remastered 2015" is when it was tidied up, not when it was written) don't count.
+  function yearHint(filename) {
+    let name = String(filename || '').replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ')
+    for (let i = 0; i < 3; i++) name = name.replace(NOISE_BRACKET, '')
+    const m = name.match(/[\[(][^\[\]()]*\b(19[2-9]\d|20[0-2]\d)\b[^\[\]()]*[\])]/)
+    return m ? Number(m[1]) : null
+  }
+
+  return { guessArtistTitle, yearHint }
 })

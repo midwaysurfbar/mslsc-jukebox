@@ -50,3 +50,27 @@ test('"Artist - Album - NN - Song" keeps just the artist and the song', () => {
   assert.deepEqual(guessArtistTitle('Queen - 01 - Bohemian Rhapsody.mp4'), { artist: 'Queen', title: 'Bohemian Rhapsody' })
   assert.deepEqual(guessArtistTitle('Matchbox 20 - 3 AM.mp4'), { artist: 'Matchbox 20', title: '3 AM' }) // a number as the title stays
 })
+
+// Junk the picker still showed (2026-10-17): none of it is part of the song's name.
+test('video junk like FULL VERSION!, promo, videoclip and source tags is dropped', () => {
+  const cases = [
+    ["Funkadelic - '(Not Just) Knee Deep' (1979) - FULL VERSION!.mp4", 'Funkadelic', "'(Not Just) Knee Deep' (1979)"],
+    ["Sandra - (I'll Never Be) Maria Magdalena • TopPop.mp4", 'Sandra', "(I'll Never Be) Maria Magdalena"],
+    ['The Rolling Stones - Angie - OFFICIAL PROMO (Version 1).mp4', 'The Rolling Stones', 'Angie'],
+    ['Real McCoy - Another Night (Videoclip).mp4', 'Real McCoy', 'Another Night'],
+    ['Elvis Presley - Blue Suede Shoes 1956 (COLOR and STEREO).mp4', 'Elvis Presley', 'Blue Suede Shoes 1956'],
+    ['Sandra - Around My Heart (Album Version).mp4', 'Sandra', 'Around My Heart'],
+    // real alternative versions stay
+    ['Bad Girls - Donna Summer (Extended Version).mp4', 'Bad Girls', 'Donna Summer (Extended Version)'],
+  ]
+  for (const [file, artist, title] of cases) assert.deepEqual(guessArtistTitle(file), { artist, title }, file)
+})
+
+test('a year written in a bracket of the filename is a hint; a remaster year is not', () => {
+  const { yearHint } = require('../shared/names')
+  assert.equal(yearHint('Funkadelic - (Not Just) Knee Deep (1979).mp4'), 1979)
+  assert.equal(yearHint('Led Zeppelin - Black Dog (Live at Madison Square Garden 1973).mp4'), 1973)
+  assert.equal(yearHint('The Beatles - Hey Jude [Remastered 2015].mp4'), null)
+  assert.equal(yearHint('Prince - 1999.mp4'), null)
+  assert.equal(yearHint('Queen - Radio Ga Ga.mp4'), null)
+})

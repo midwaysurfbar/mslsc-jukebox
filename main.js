@@ -14,6 +14,7 @@ const { createStore } = require('./lib/store')
 const { createLibrary, walkImageFiles, requireFileKey, isFileKey } = require('./lib/library')
 const { createConverter } = require('./lib/convert')
 const { createMetadata } = require('./lib/metadata')
+const { createYears } = require('./lib/years')
 const { createWebAds } = require('./lib/web-ads')
 const { createMediaWatch } = require('./lib/media-watch')
 const { createInboxSorter } = require('./lib/inbox-sorter')
@@ -81,6 +82,13 @@ const library = createLibrary(store, {
 })
 const converter = createConverter({ store, library, ffmpegPath: FFMPEG_PATH, trashItem: (p) => shell.trashItem(p) })
 const metadata = createMetadata({ store, library })
+// Each song's original year from MusicBrainz, a few at a time in the background (lib/years.js). The picker's list is
+// rebuilt as results arrive so decades fix themselves without a restart.
+const years = createYears({ store, onBatch: () => { if (requests) requests.invalidateLibrary() } })
+const runYears = () => years.run(() => library.listRequestLibrary()).catch(() => {})
+setTimeout(runYears, 3 * 60 * 1000)
+setInterval(runYears, 6 * 3600 * 1000)
+app.on('before-quit', () => years.stop())
 const webAds = createWebAds({ store })
 const mediaWatch = createMediaWatch(() => {
   if (requests) requests.invalidateLibrary()
