@@ -73,6 +73,10 @@ for (const [name, value] of extraFlags) value === undefined ? app.commandLine.ap
 // Bundled with the app - there's exactly one intro clip, so nothing to pick.
 const INTRO_VIDEO_PATH = path.join(__dirname, 'assets', 'intro-video.mp4')
 
+// Node tries IPv6 then IPv4 with only 250 ms per attempt, which is too short to reach MusicBrainz (the far side of the world:
+// "fetch failed ETIMEDOUT"). Give each attempt 5 s. (v0.30.1)
+try { require('node:net').setDefaultAutoSelectFamilyAttemptTimeout(5000) } catch { /* older Node: nothing to set */ }
+
 const store = createStore(app.getPath('userData'))
 const { paths } = store
 let requests = null
