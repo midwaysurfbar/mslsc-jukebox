@@ -318,3 +318,10 @@ body.kb-open .toast{bottom:auto;top:92px}
 .queue-panel li{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* overflow:clip (not hidden) so tapping a button can never scroll the bar sideways */
 #main .top{overflow:clip}
+
+/* One sunburst across the whole touchscreen (2026-10-18): the burst's centre stays at the same height, and when the
+   picker is on the left half of the screen its centre is the picker's right edge (left edge if it is on the right).
+   Taller, so the stripes run to the bottom of the screen too. */
+.overlay::before{inset:-135% -100% -65% -100%}
+html[data-touch-side=left] .overlay::before{inset:-135% -150% -65% -50%}
+html[data-touch-side=right] .overlay::before{inset:-135% -50% -65% -150%}

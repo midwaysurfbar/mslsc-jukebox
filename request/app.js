@@ -223,6 +223,14 @@ document.addEventListener('pointerdown', (e) => {
 }, { passive: true })
 $('back-start').addEventListener('click', () => { query = ''; decade = ''; letter = ''; allMode = false; searchChanged(); applyFilters() })
 
+// The touchscreen's frame page says which half of the screen the picker is on, so its sunburst can be the other half
+// of one burst centred on the screen's middle line (Sam, 2026-10-18). Ignored outside that frame.
+window.addEventListener('message', (e) => {
+  const d = e.data
+  if (e.source !== window.parent || !d || d.mslsc !== 'layout') return
+  if (d.side === 'left' || d.side === 'right') document.documentElement.dataset.touchSide = d.side
+})
+
 // ---- status ---------------------------------------------------------------
 // "Today · 17:00", "Tomorrow · 17:00" or "Saturday 11 October · 17:00"
 function whenText({ date, time }) {
