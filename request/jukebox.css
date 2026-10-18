@@ -122,3 +122,16 @@ html body{background:
 .toast.warn{border-color:var(--amber)}
 .toast small{color:#6a4a30;font-family:var(--label)}
 @media (prefers-reduced-motion:reduce){#main .top::before{animation:none!important}}
+
+/* ---- idle "Pick a song" screen while the sign-in beside it is open: dark wood + neon, like the rest of the jukebox ---- */
+html[data-kiosk=open] #idle.overlay{background:
+  repeating-linear-gradient(90deg,rgba(0,0,0,.18) 0 2px,transparent 2px 9px),
+  repeating-linear-gradient(90deg,rgba(255,190,120,.05) 0 1px,transparent 1px 23px),
+  radial-gradient(circle at 50% 40%,#5a2a12,#1b0b06 70%)}
+html[data-kiosk=open] #idle.overlay::before,html[data-kiosk=open] #idle.overlay::after{display:none}
+html[data-kiosk=open] #idle h1{font-family:Monoton,Anton,sans-serif;font-weight:400;color:#fff;text-transform:uppercase;letter-spacing:.04em;line-height:1.05;
+  text-shadow:0 0 8px #fff,0 0 22px #ffb238,0 0 50px #ff5a2b;animation:jb-neon 3.5s ease-in-out infinite!important}
+@keyframes jb-neon{50%{text-shadow:0 0 6px #fff,0 0 30px #ff4bd8,0 0 60px #35c7ff}}
+html[data-kiosk=open] #idle p{color:#fff4de;font-family:"Special Elite","Barlow",system-ui,sans-serif}
+html[data-kiosk=open] #idle .overlay-now{color:#e6c9a0}
+@media (prefers-reduced-motion:reduce){html[data-kiosk=open] #idle h1{animation:none!important}}

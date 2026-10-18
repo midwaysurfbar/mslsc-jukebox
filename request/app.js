@@ -229,6 +229,8 @@ window.addEventListener('message', (e) => {
   const d = e.data
   if (e.source !== window.parent || !d || d.mslsc !== 'layout') return
   if (d.side === 'left' || d.side === 'right') document.documentElement.dataset.touchSide = d.side
+  // the sign-in next to the picker is open: the idle screen then matches its dark wood jukebox look
+  document.documentElement.dataset.kiosk = d.kioskClosed === false ? 'open' : 'closed'
 })
 
 // ---- status ---------------------------------------------------------------
