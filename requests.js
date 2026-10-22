@@ -25,7 +25,10 @@
 //
 // Bar open/closed (Sam, 2026-10-09): by default requests only open while
 // the bar is open - the same open/closed state the Attendance sign-in kiosk
-// and the menu board show (public-kiosk-state), checked every 30 seconds.
+// and the menu board show (public-kiosk-state), checked every 30 seconds while
+// the bar is open, every minute near a booked opening and every 5 minutes the
+// rest of the week (shared/pollSchedule.js; the bar is only open Fridays and the
+// odd Sunday).
 // While it's closed the picker shows "Bar closed" with the next opening
 // (public-next-bar-opening). Staff in Control and on the Remote are never
 // limited. If the check can't be made (internet down) the last answer
@@ -44,6 +47,7 @@
 // queue itself is still owned by the Control window - this file only asks
 // it to add a song and relays the answer.
 
+const { barMode, refreshDelayMs } = require('./shared/pollSchedule')
 const http = require('node:http')
 const os = require('node:os')
 const fs = require('node:fs')
@@ -181,13 +185,20 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   const suggestTimer = setInterval(() => { flushSuggestions().catch(() => {}) }, 60 * 1000)
   if (suggestTimer.unref) suggestTimer.unref()
 
-  async function checkBar() {
+  let lastNextFetch = 0
+  async function checkBar(useCachedNext = false) {
     try {
       const open = Boolean((await callBarFn('public-kiosk-state')).session?.is_open)
       let next = null
       if (!open) {
-        const b = (await callBarFn('public-next-bar-opening').catch(() => ({}))).booking
-        if (b) next = { title: b.title || 'Bar opening', date: b.event_date, time: String(b.start_time || '').slice(0, 5) }
+        // The booked opening only changes when a booking does: from the timer, ask at most every 5 minutes.
+        if (useCachedNext && bar.open === false && bar.next && Date.now() - lastNextFetch < 5 * 60 * 1000) {
+          next = bar.next
+        } else {
+          lastNextFetch = Date.now()
+          const b = (await callBarFn('public-next-bar-opening').catch(() => ({}))).booking
+          if (b) next = { title: b.title || 'Bar opening', date: b.event_date, time: String(b.start_time || '').slice(0, 5) }
+        }
       }
       const changed = open !== bar.open || JSON.stringify(next) !== JSON.stringify(bar.next)
       bar = { open, next, checkedAt: Date.now() }
@@ -199,7 +210,22 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   function startBarChecks() {
     if (barTimer || !barCheckMs) return
     checkBar()
-    barTimer = setInterval(checkBar, barCheckMs)
+    if (barCheckMs !== BAR_CHECK_MS) {
+      barTimer = setInterval(checkBar, barCheckMs) // a fixed cadence (tests)
+      return
+    }
+    // Adaptive: how long to wait depends on whether the bar is open and when the next opening is booked.
+    const waitMs = () => refreshDelayMs(barMode({
+      isOpen: bar.open !== false, // not known yet counts as open
+      opening: bar.next ? { eventDate: bar.next.date, startTime: bar.next.time } : null,
+    }), BAR_CHECK_MS)
+    const arm = () => {
+      barTimer = setTimeout(async () => {
+        await checkBar(true)
+        if (barTimer) arm()
+      }, waitMs())
+    }
+    arm()
   }
   // Requests are open to the picker when switched on AND (if following the
   // bar) the bar isn't known to be closed.
@@ -645,6 +671,7 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     tickSuggestions,
     // tests only
     checkBar,
+    startBarChecks,
     close: () => new Promise((resolve) => {
       clearInterval(barTimer)
       clearInterval(suggestTimer)

@@ -399,3 +399,35 @@ test('the song list version goes up when the library changes, for the picker and
   const v2 = (await call('/api/status', { token: picker })).data.libraryVersion
   assert.ok(v2 > v1)
 })
+
+test('bar checks slow right down while the bar is shut and nothing is booked soon', async (t) => {
+  const calls = { state: 0, next: 0 }
+  const farOff = { open: false, booking: { title: 'Friday night', event_date: '2099-01-01', start_time: '17:00:00' } }
+  const inner = fakeBar(farOff)
+  const counting = async (url) => {
+    if (url.endsWith('public-kiosk-state')) calls.state += 1
+    else calls.next += 1
+    return inner(url)
+  }
+  const fake = start(t, { fetchImpl: counting, barCheckMs: 30000 }) // the real cadence: adaptive
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((resolve) => setImmediate(resolve)) }
+  fake.api.startBarChecks()
+  await settle()
+  assert.deepEqual(calls, { state: 1, next: 1 }, 'one check at start')
+  for (let minute = 0; minute < 20; minute++) {
+    t.mock.timers.tick(60 * 1000)
+    await settle()
+  }
+  // 20 minutes at 30 seconds would be 41 checks; closed with no opening soon it is one every 5 minutes (4 more) and the
+  // booked opening is only asked for once (it is cached for 5 minutes at a time, so once more at most).
+  assert.ok(calls.state >= 3 && calls.state <= 6, `kiosk-state calls in 20 min: ${calls.state}`)
+  assert.ok(calls.next >= 1 && calls.next <= 6, `next-opening calls in 20 min: ${calls.next}`)
+
+  // Once the bar is open the checks speed up again: every 30 seconds.
+  farOff.open = true
+  for (let minute = 0; minute < 6; minute++) { t.mock.timers.tick(60 * 1000); await settle() } // reaches the next slow check
+  const before = calls.state
+  for (let half = 0; half < 10; half++) { t.mock.timers.tick(30 * 1000); await settle() } // 5 minutes in 30-second steps
+  assert.ok(calls.state - before >= 8, `open bar: ${calls.state - before} checks in 5 minutes`)
+})
