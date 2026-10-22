@@ -25,10 +25,11 @@
 //
 // Bar open/closed (Sam, 2026-10-09): by default requests only open while
 // the bar is open - the same open/closed state the Attendance sign-in kiosk
-// and the menu board show (public-kiosk-state), checked every 30 seconds while
-// the bar is open, every minute near a booked opening and every 5 minutes the
-// rest of the week (shared/pollSchedule.js; the bar is only open Fridays and the
-// odd Sunday).
+// and the menu board show (public-kiosk-state), checked every 30 seconds through the free
+// bar_status lookup (the database function, not an edge-function call). If that
+// is not answering the older functions take over, every 30 seconds while the
+// bar is open, every minute near a booked opening and every 5 minutes otherwise
+// (shared/pollSchedule.js; the bar is only open Fridays and the odd Sunday).
 // While it's closed the picker shows "Bar closed" with the next opening
 // (public-next-bar-opening). Staff in Control and on the Remote are never
 // limited. If the check can't be made (internet down) the last answer
@@ -84,6 +85,7 @@ PAGE_FILES['/theme.js'] = ['shared/theme.js', 'text/javascript; charset=utf-8']
 const KINDS = new Set(['picker', 'remote', 'library'])
 const KIND_NAMES = { picker: 'Touch screen', remote: 'Remote', library: 'Laptop' }
 const BAR_FN = 'https://zzfcadiphconmkeudrby.supabase.co/functions/v1/'
+const BAR_RPC = 'https://zzfcadiphconmkeudrby.supabase.co/rest/v1/rpc/bar_status' // the free open/closed lookup (see checkBar)
 const BAR_KEY = 'sb_publishable_IDOXZicxdptjL667yWpVAQ_H1jB2saj' // public anon key, same as the ads
 const BAR_CHECK_MS = 30000
 // Commands the main process answers itself; everything else goes to Control.
@@ -124,6 +126,19 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
     })
     const data = await res.json()
     if (!data || !data.ok) throw new Error('bar status unavailable')
+    return data
+  }
+  // The free lookup (Sam, 2026-10-22): the database function bar_status() through the REST API. The plan does not count it
+  // like an edge-function call, so the jukebox can ask every 30 seconds all week. Answers { is_open, next } or throws.
+  async function callBarRpc() {
+    const res = await fetchImpl(BAR_RPC, {
+      method: 'POST',
+      headers: { apikey: BAR_KEY, Authorization: `Bearer ${BAR_KEY}`, 'Content-Type': 'application/json' },
+      body: '{}',
+      signal: AbortSignal.timeout(10000),
+    })
+    const data = await res.json()
+    if (!data || typeof data.is_open !== 'boolean') throw new Error('bar status lookup unavailable')
     return data
   }
   // ---- song suggestions (Sam, 2026-10-10) ----
@@ -186,7 +201,23 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
   if (suggestTimer.unref) suggestTimer.unref()
 
   let lastNextFetch = 0
+  let lookupWorks = false // true while the free lookup is answering
   async function checkBar(useCachedNext = false) {
+    // The free lookup first: open or closed AND the next booked opening in one call. If it is not answering (not set up,
+    // or the network blips), the older functions below take over, with the slower bookings-based rhythm.
+    try {
+      const st = await callBarRpc()
+      lookupWorks = true
+      const open = st.is_open
+      const n = st.next
+      const next = !open && n ? { title: n.title || 'Bar opening', date: n.event_date, time: String(n.start_time || '').slice(0, 5) } : null
+      const changed = open !== bar.open || JSON.stringify(next) !== JSON.stringify(bar.next)
+      bar = { open, next, checkedAt: Date.now() }
+      if (changed) notifyControl()
+      return
+    } catch {
+      lookupWorks = false
+    }
     try {
       const open = Boolean((await callBarFn('public-kiosk-state')).session?.is_open)
       let next = null
@@ -215,10 +246,12 @@ module.exports = function setupRequests({ ipcMain, getControlWindow, userData, t
       return
     }
     // Adaptive: how long to wait depends on whether the bar is open and when the next opening is booked.
-    const waitMs = () => refreshDelayMs(barMode({
-      isOpen: bar.open !== false, // not known yet counts as open
-      opening: bar.next ? { eventDate: bar.next.date, startTime: bar.next.time } : null,
-    }), BAR_CHECK_MS)
+    const waitMs = () => lookupWorks
+      ? BAR_CHECK_MS // the free lookup: every 30 seconds, all week
+      : refreshDelayMs(barMode({
+        isOpen: bar.open !== false, // not known yet counts as open
+        opening: bar.next ? { eventDate: bar.next.date, startTime: bar.next.time } : null,
+      }), BAR_CHECK_MS)
     const arm = () => {
       barTimer = setTimeout(async () => {
         await checkBar(true)

@@ -400,11 +400,12 @@ test('the song list version goes up when the library changes, for the picker and
   assert.ok(v2 > v1)
 })
 
-test('bar checks slow right down while the bar is shut and nothing is booked soon', async (t) => {
+test('backup path (lookup unavailable): bar checks slow right down while the bar is shut and nothing is booked soon', async (t) => {
   const calls = { state: 0, next: 0 }
   const farOff = { open: false, booking: { title: 'Friday night', event_date: '2099-01-01', start_time: '17:00:00' } }
   const inner = fakeBar(farOff)
   const counting = async (url) => {
+    if (url.endsWith('bar_status')) throw new Error('lookup not set up') // the backup path: the older functions
     if (url.endsWith('public-kiosk-state')) calls.state += 1
     else calls.next += 1
     return inner(url)
@@ -430,4 +431,52 @@ test('bar checks slow right down while the bar is shut and nothing is booked soo
   const before = calls.state
   for (let half = 0; half < 10; half++) { t.mock.timers.tick(30 * 1000); await settle() } // 5 minutes in 30-second steps
   assert.ok(calls.state - before >= 8, `open bar: ${calls.state - before} checks in 5 minutes`)
+})
+
+test('the free bar_status lookup is used instead of the edge functions, and shows an unbooked opening', async (t) => {
+  const calls = { rpc: 0, fn: 0 }
+  const state = { open: false, next: { title: 'Friday night', event_date: '2099-01-01', start_time: '17:00:00' } }
+  const lookupFetch = async (url) => {
+    if (url.endsWith('/rest/v1/rpc/bar_status')) {
+      calls.rpc += 1
+      return { json: async () => ({ is_open: state.open, next: state.next }) }
+    }
+    calls.fn += 1 // any edge-function URL
+    return { json: async () => ({ ok: true, session: { is_open: state.open }, booking: null }) }
+  }
+  const fake = start(t, { fetchImpl: lookupFetch })
+  const picker = await pair(fake, 'picker')
+  await fake.handlers['requests:set-enabled'](null, true)
+  await fake.api.checkBar()
+  assert.equal(calls.fn, 0, 'the edge functions are not used while the lookup answers')
+  assert.equal(calls.rpc, 1)
+  let st = (await call('/api/status', { token: picker })).data
+  assert.equal(st.barAllows, false)
+  assert.deepEqual(st.nextOpening, { title: 'Friday night', date: '2099-01-01', time: '17:00' })
+
+  // Someone opens the bar on a night with nothing booked: the very next check sees it.
+  state.open = true
+  state.next = null
+  await fake.api.checkBar()
+  st = (await call('/api/status', { token: picker })).data
+  assert.equal(st.barAllows, true)
+  assert.equal(st.nextOpening, null)
+  assert.equal(calls.fn, 0)
+})
+
+test('if the lookup stops answering the jukebox falls back to the older functions', async (t) => {
+  const calls = { rpc: 0, fn: 0 }
+  const state = { open: true }
+  const brokenLookup = async (url) => {
+    if (url.endsWith('/rest/v1/rpc/bar_status')) {
+      calls.rpc += 1
+      return { json: async () => ({ message: 'function not found' }) }
+    }
+    calls.fn += 1
+    return { json: async () => ({ ok: true, session: { is_open: state.open }, booking: null }) }
+  }
+  const fake = start(t, { fetchImpl: brokenLookup })
+  await fake.api.checkBar()
+  assert.equal(calls.rpc, 1)
+  assert.ok(calls.fn >= 1, 'the older functions answered instead')
 })
