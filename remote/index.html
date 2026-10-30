@@ -70,7 +70,6 @@
     <button role="tab" data-tab="search">Add songs</button>
     <button role="tab" data-tab="playlists">Playlists</button>
     <button role="tab" data-tab="suggestions">Suggestions <span class="count" id="sg-count"></span></button>
-    <button role="tab" data-tab="screens">Requests &amp; screens</button>
   </nav>
 
   <section class="panel" id="tab-queue">
@@ -110,37 +109,6 @@
     <p class="note" style="margin:0 0 10px">Songs people asked for on the song picker that aren't in the library. Tap Find on YouTube, copy the right video's link into 4K Video Downloader on a laptop - it comes to the Jukebox and ticks itself off.</p>
     <ol class="rows" id="sg-list"></ol>
     <details class="sg-handled"><summary>Recently added or dismissed</summary><ol class="rows" id="sg-done"></ol></details>
-  </section>
-
-  <section class="panel" id="tab-screens" hidden>
-    <label class="switch-row">
-      <span><b>Song requests</b><br><span class="note" id="req-summary"></span></span>
-      <input type="checkbox" id="req-toggle" class="switch">
-    </label>
-    <label class="switch-row">
-      <span><b>Only while the bar is open</b><br><span class="note">Follows the sign-in kiosk's open/closed. The picker shows "Bar closed" until it opens.</span></span>
-      <input type="checkbox" id="bar-toggle" class="switch">
-    </label>
-    <label class="switch-row">
-      <span><b>Start with the TV off (club ads)</b><br><span class="note">When the venue PC starts, the TV shows the club ads until someone presses Turn TV on. Music still plays.</span></span>
-      <input type="checkbox" id="tv-hidden-toggle" class="switch">
-    </label>
-    <div class="code-box" id="code-box" hidden>
-      <p id="code-intro"></p>
-      <p class="code-address" id="code-address"></p>
-      <p>then enter this code:</p>
-      <p class="code" id="code"></p>
-      <p class="note" id="code-expiry"></p>
-      <button class="secondary" id="code-done">Done</button>
-    </div>
-    <div class="panel-actions">
-      <button class="primary" data-pair="picker">Set up a touch screen</button>
-      <button class="secondary" data-pair="remote">Set up another remote</button>
-      <button class="secondary" data-pair="library">Set up a laptop (Library)</button>
-    </div>
-    <h2>Screens set up</h2>
-    <ol class="rows" id="device-list"></ol>
-    <p class="note" id="version"></p>
   </section>
 </main>
 

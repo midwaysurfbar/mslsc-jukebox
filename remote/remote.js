@@ -102,7 +102,7 @@ let tab = 'queue'
 document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {
   tab = b.dataset.tab
   document.querySelectorAll('[data-tab]').forEach((x) => x.classList.toggle('on', x === b))
-  for (const name of ['queue', 'search', 'playlists', 'suggestions', 'screens']) $(`tab-${name}`).hidden = name !== tab
+  for (const name of ['queue', 'search', 'playlists', 'suggestions']) $(`tab-${name}`).hidden = name !== tab
   if (tab === 'suggestions') loadSuggestions()
   if (tab === 'search') { loadLibrary(); renderSearch(); $('search').focus() }
   if (tab === 'playlists') renderPlaylists()
@@ -398,8 +398,7 @@ $('pl-songs').addEventListener('click', (e) => {
   else command('add', { key: b.dataset.k }, `${name} added.`)
 })
 
-// ---------------------------------------------------------------- requests & screens
-$('tv-hidden-toggle').addEventListener('change', () => command('tv-start-hidden', { hidden: $('tv-hidden-toggle').checked }, $('tv-hidden-toggle').checked ? 'The TV will start hidden.' : 'The TV will show at start-up.'))
+// ---------------------------------------------------------------- club TV (requests, screens and start-up options moved to the Staff Hub's Settings tab, 2026-10-31)
 $('tv-btn').addEventListener('click', () => {
   // TV off = the club's ads (music keeps playing), never a black screen
   const mode = (state && state.tv && state.tv.mode) || 'blank'
@@ -407,19 +406,6 @@ $('tv-btn').addEventListener('click', () => {
   else command('tv-show', {}, 'Music videos back on the TV.')
 })
 $('tv-blank').addEventListener('click', () => command('tv-blank', {}, 'TV screen blank.'))
-$('bar-toggle').addEventListener('change', () => command('requests-follow-bar', { follow: $('bar-toggle').checked }, $('bar-toggle').checked ? 'Requests now follow the bar.' : 'Requests no longer follow the bar.'))
-$('req-toggle').addEventListener('change', () => command('requests-enabled', { enabled: $('req-toggle').checked }, $('req-toggle').checked ? 'Song requests are on.' : 'Song requests are off.'))
-document.querySelectorAll('[data-pair]').forEach((b) => b.addEventListener('click', () => command('pair', { kind: b.dataset.pair })))
-$('code-done').addEventListener('click', () => command('cancel-pair'))
-function timeAgo(ms) {
-  if (!ms) return 'not used yet'
-  const mins = Math.round((Date.now() - ms) / 60000)
-  if (mins < 2) return 'in use now'
-  if (mins < 60) return `last used ${mins} min ago`
-  const hours = Math.round(mins / 60)
-  return hours < 48 ? `last used ${hours} h ago` : `last used ${new Date(ms).toLocaleDateString()}`
-}
-let lastDevSig = ''
 function renderTv() {
   const tv = state.tv
   const mode = tv ? (tv.mode || (tv.visible ? 'videos' : 'blank')) : 'blank'
@@ -428,44 +414,7 @@ function renderTv() {
   $('tv-state').textContent = !tv ? '' : mode === 'videos' ? 'On - showing the music videos' : mode === 'ads' ? 'Off - showing the club ads (music still plays)' : 'Blank screen (music still plays)'
   $('tv-btn').textContent = mode === 'videos' ? 'Turn TV off' : 'Turn TV on'
   $('tv-blank').hidden = !tv || mode === 'blank'
-  if (state.player) $('tv-hidden-toggle').checked = Boolean(state.player.tvStartHidden)
 }
-
-function renderScreens() {
-  const r = state.requests
-  $('req-toggle').checked = r.enabled
-  $('bar-toggle').checked = r.followBar
-  const next = r.nextOpening ? ` Next opening: ${r.nextOpening.title}, ${r.nextOpening.date} ${r.nextOpening.time}.` : ''
-  $('req-summary').textContent = !r.enabled ? 'Off - the song picker is closed. Songs added here aren\'t limited.'
-    : !r.barAllows ? `On, but the bar is closed - the picker shows "Bar closed" until it opens.${next}`
-    : `On - ${Math.min(r.waiting, r.maxWaiting)} of ${r.maxWaiting} places used`
-  const box = $('code-box')
-  box.hidden = !r.pairing
-  if (r.pairing) {
-    const remote = r.pairing.kind === 'remote'
-    const laptop = r.pairing.kind === 'library'
-    $('code-intro').textContent = laptop ? 'On the laptop, with Tailscale on, open this address:' : remote ? 'On the new remote (another PC, phone or tablet), open this address:' : 'On the touch screen, open this address:'
-    $('code-address').textContent = laptop ? (r.tailnetAddress || '') : r.address ? (remote ? `${r.address}/remote` : r.address) : ''
-    $('code').textContent = r.pairing.code
-    const mins = Math.max(0, Math.ceil((r.pairing.expiresAt - Date.now()) / 60000))
-    $('code-expiry').textContent = `This code works for ${mins} more minute${mins === 1 ? '' : 's'}.`
-  }
-  const sig = JSON.stringify([r.devices, Math.floor(Date.now() / 60000)])
-  if (sig !== lastDevSig) {
-    lastDevSig = sig
-    const list = $('device-list')
-    list.replaceChildren()
-    if (!r.devices.length) list.append(el('li', { class: 'empty', text: 'No screens set up yet.' }))
-    r.devices.forEach((d) => list.append(el('li', { class: 'row' },
-      el('span', { class: 'what' }, el('b', { text: d.id === state.you ? `${d.name} (this one)` : d.name }), el('span', { text: `${d.kind === 'remote' ? 'Staff remote' : d.kind === 'library' ? 'Library laptop' : 'Song picker'} · ${timeAgo(d.lastSeen)}` })),
-      d.id === state.you ? null : el('span', { class: 'acts' }, el('button', { class: 'danger', text: 'Remove', 'data-d': d.id, 'data-n': d.name })))))
-  }
-  $('version').textContent = state.version ? `Jukebox ${state.version}` : ''
-}
-$('device-list').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-d]')
-  if (b && confirm(`Remove ${b.dataset.n}? It will need setting up again before it can be used.`)) command('remove-device', { id: b.dataset.d }, `${b.dataset.n} removed.`)
-})
 
 // ---------------------------------------------------------------- polling
 async function poll() {
@@ -488,7 +437,6 @@ async function poll() {
     renderNow()
     renderQueue()
     if (tab === 'playlists') renderPlaylists()
-    renderScreens()
     renderTv()
   } catch (err) {
     if (err.message !== 'not-paired' && ++failures >= 3) {
@@ -505,7 +453,7 @@ let pollTimer = null
 function start() {
   $('pair').hidden = true
   $('main').hidden = false
-  lastQueueSig = lastPlSig = lastDevSig = ''
+  lastQueueSig = lastPlSig = ''
   poll()
   loadSuggestions()
   loadLibrary()
